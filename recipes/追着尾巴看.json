@@ -1,0 +1,20 @@
+{
+  "name": "追着尾巴看",
+  "when": "尾巴自己动了，她扭头去找，越看越稀奇",
+  "steps": [
+    {
+      "at": 0,
+      "type": "trajectory",
+      "duration": 5.0,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 0.9, "values": { "AngleX": 16, "AngleY": 8, "AngleZ": -10, "PositionX": -8, "LeanInput": -6 } },
+        { "time": 2.2, "values": { "AngleX": 8, "AngleY": 11, "AngleZ": -4, "PositionX": -3, "LeanInput": -8 } },
+        { "time": 3.4, "values": { "AngleX": 17, "AngleY": 5, "AngleZ": -9, "PositionX": -9, "LeanInput": -5 } },
+        { "time": 5.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    },
+    { "at": 200, "type": "expression", "name": "surprised", "dur": 1200 },
+    { "at": 1500, "type": "expression", "name": "happy", "dur": 2600 }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "name": "打招呼",
+  "when": "他回来了、刚打开桌宠",
+  "steps": [
+    {
+      "at": 0,
+      "type": "trajectory",
+      "duration": 2.4,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 0.5, "values": { "AngleX": -4, "AngleY": -2, "AngleZ": 7, "PositionX": 8, "LeanInput": -4 } },
+        { "time": 1.2, "values": { "AngleX": 4, "AngleY": -2, "AngleZ": -5, "PositionX": 4, "LeanInput": -4 } },
+        { "time": 2.3, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    },
+    { "at": 0, "type": "expression", "name": "happy", "dur": 2200 },
+    { "at": 1200, "type": "look", "target": "user", "dur": 1400 }
+  ]
+}

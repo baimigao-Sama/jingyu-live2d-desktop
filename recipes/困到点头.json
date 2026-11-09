@@ -1,0 +1,22 @@
+{
+  "name": "困到点头",
+  "when": "深夜、犯困但还撑着",
+  "steps": [
+    {
+      "at": 0,
+      "type": "trajectory",
+      "duration": 4.2,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 0.9, "values": { "AngleX": 0, "AngleY": 10, "AngleZ": 3, "PositionX": 0, "LeanInput": -5 } },
+        { "time": 1.5, "values": { "AngleX": 0, "AngleY": 2, "AngleZ": -2, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 2.4, "values": { "AngleX": 0, "AngleY": 9, "AngleZ": 4, "PositionX": 0, "LeanInput": -5 } },
+        { "time": 3.0, "values": { "AngleX": 0, "AngleY": 1, "AngleZ": -1, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 4.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    },
+    { "at": 0, "type": "expression", "name": "sleepy", "dur": 4200 },
+    { "at": 300, "type": "preset", "name": "＞＜", "dur": 2800 },
+    { "at": 300, "type": "look", "target": "down", "dur": 3200 }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "name": "想你了",
+  "when": "他好久没来",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "sad", "dur": 2200 },
+    { "at": 250, "type": "look", "target": "user", "dur": 1600 },
+    { "at": 1500, "type": "expression", "name": "excited", "dur": 2400 },
+    { "at": 1600, "type": "preset", "name": "爱心眼", "dur": 2200 },
+    { "at": 2600, "type": "look", "target": "user", "dur": 1400 }
+  ]
+}

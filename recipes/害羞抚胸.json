@@ -1,0 +1,22 @@
+{
+  "name": "害羞抚胸",
+  "when": "被夸到不知道手往哪放，抬起来按在胸口，脸红着别过头",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "shy", "dur": 3800 },
+    { "at": 120, "type": "preset", "name": "脸红", "dur": 3400 },
+    {
+      "at": 200,
+      "type": "trajectory",
+      "duration": 3.4,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 0.8, "values": { "AngleX": 10, "AngleY": -5, "AngleZ": 7, "PositionX": 4, "LeanInput": -6 } },
+        { "time": 2.0, "values": { "AngleX": 12, "AngleY": -3, "AngleZ": 8, "PositionX": 5, "LeanInput": -7 } },
+        { "time": 2.6, "values": { "AngleX": 4, "AngleY": 4, "AngleZ": -3, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 3.4, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    },
+    { "at": 300, "type": "motion", "group": "默认手切举手" },
+    { "at": 2700, "type": "motion", "group": "举手切默认手" }
+  ]
+}

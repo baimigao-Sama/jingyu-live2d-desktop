@@ -1,0 +1,20 @@
+{
+  "name": "听到声音回头",
+  "when": "背后有动静，她猛地回头看一眼，再慢慢转回来",
+  "steps": [
+    {
+      "at": 0,
+      "type": "trajectory",
+      "duration": 3.4,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 0.35, "values": { "AngleX": -18, "AngleY": -2, "AngleZ": 7, "PositionX": 9, "LeanInput": -1 } },
+        { "time": 1.1, "values": { "AngleX": -18, "AngleY": 1, "AngleZ": 6, "PositionX": 9, "LeanInput": -1 } },
+        { "time": 2.2, "values": { "AngleX": -6, "AngleY": 4, "AngleZ": 2, "PositionX": 3, "LeanInput": -3 } },
+        { "time": 3.4, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    },
+    { "at": 250, "type": "expression", "name": "surprised", "dur": 900 },
+    { "at": 1200, "type": "expression", "name": "thinking", "dur": 1400 }
+  ]
+}

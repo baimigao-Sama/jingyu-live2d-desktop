@@ -1,0 +1,11 @@
+{
+  "name": "害羞",
+  "when": "他说肉麻的",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "shy", "dur": 2400 },
+    { "at": 150, "type": "preset", "name": "脸红", "dur": 2400 },
+    { "at": 250, "type": "angle", "x": -8, "y": 2, "z": 10, "dur": 1200 },
+    { "at": 1200, "type": "look", "target": "away", "dur": 1200 },
+    { "at": 1800, "type": "angle", "x": -4, "y": 0, "z": 6, "dur": 1000 }
+  ]
+}

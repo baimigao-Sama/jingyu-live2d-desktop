@@ -1,0 +1,10 @@
+{
+  "name": "干活中",
+  "when": "小诺在跑命令",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "typing", "dur": 3600 },
+    { "at": 200, "type": "angle", "x": 0, "y": 7, "z": -2, "dur": 2800 },
+    { "at": 300, "type": "look", "target": "down", "dur": 2800 },
+    { "at": 3000, "type": "expression", "name": "thinking", "dur": 1600 }
+  ]
+}

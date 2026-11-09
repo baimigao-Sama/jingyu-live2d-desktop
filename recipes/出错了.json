@@ -1,0 +1,11 @@
+{
+  "name": "出错了",
+  "when": "报错(先皱眉,然后抬眼看他一眼)",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "serious", "dur": 2600 },
+    { "at": 150, "type": "preset", "name": "单片眼镜", "dur": 2200 },
+    { "at": 250, "type": "angle", "x": 0, "y": 7, "z": 0, "dur": 1400 },
+    { "at": 1300, "type": "look", "target": "user", "dur": 1600 },
+    { "at": 2000, "type": "angle", "x": 0, "y": -2, "z": 0, "dur": 900 }
+  ]
+}

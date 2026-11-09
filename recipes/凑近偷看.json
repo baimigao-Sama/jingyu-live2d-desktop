@@ -1,0 +1,22 @@
+{
+  "name": "凑近偷看",
+  "when": "想知道你在干嘛，悄悄凑近看一眼，被发现了就缩回去",
+  "steps": [
+    {
+      "at": 0,
+      "type": "trajectory",
+      "duration": 5.6,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 1.2, "values": { "AngleX": 8, "AngleY": -6, "AngleZ": 4, "PositionX": 8, "LeanInput": -9 } },
+        { "time": 2.6, "values": { "AngleX": 10, "AngleY": -4, "AngleZ": 6, "PositionX": 9, "LeanInput": -10 } },
+        { "time": 3.6, "values": { "AngleX": 4, "AngleY": 6, "AngleZ": -5, "PositionX": 2, "LeanInput": -4 } },
+        { "time": 5.6, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    },
+    { "at": 300, "type": "expression", "name": "thinking", "dur": 2400 },
+    { "at": 3000, "type": "expression", "name": "surprised", "dur": 900 },
+    { "at": 3600, "type": "preset", "name": "脸红", "dur": 2000 },
+    { "at": 3700, "type": "expression", "name": "shy", "dur": 1900 }
+  ]
+}

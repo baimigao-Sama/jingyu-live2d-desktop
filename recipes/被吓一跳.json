@@ -1,0 +1,12 @@
+{
+  "name": "被吓一跳",
+  "when": "他猛地动鼠标",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "surprised", "dur": 1400 },
+    { "at": 100, "type": "preset", "name": "圈圈眼", "dur": 1200 },
+    { "at": 100, "type": "angle", "x": 0, "y": -8, "z": 0, "dur": 700 },
+    { "at": 1200, "type": "angle", "x": 0, "y": 2, "z": -4, "dur": 1200 },
+    { "at": 1400, "type": "expression", "name": "shy", "dur": 2000 },
+    { "at": 1500, "type": "preset", "name": "脸红", "dur": 2000 }
+  ]
+}

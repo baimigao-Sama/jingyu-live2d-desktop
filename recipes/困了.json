@@ -1,0 +1,11 @@
+{
+  "name": "困了",
+  "when": "深夜",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "sleepy", "dur": 3400 },
+    { "at": 200, "type": "preset", "name": "＞＜", "dur": 2400 },
+    { "at": 300, "type": "look", "target": "down", "dur": 2600 },
+    { "at": 500, "type": "angle", "x": 2, "y": 8, "z": 4, "dur": 2400 },
+    { "at": 2600, "type": "expression", "name": "sleepy", "dur": 2000 }
+  ]
+}

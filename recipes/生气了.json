@@ -1,0 +1,12 @@
+{
+  "name": "生气了",
+  "when": "他惹她了",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "angry", "dur": 2800 },
+    { "at": 150, "type": "preset", "name": "黑脸", "dur": 2600 },
+    { "at": 250, "type": "angle", "x": -12, "y": -2, "z": -4, "dur": 1400 },
+    { "at": 400, "type": "motion", "group": "竖手指切出来动画" },
+    { "at": 1600, "type": "look", "target": "away", "dur": 1400 },
+    { "at": 1900, "type": "motion", "group": "竖手指切回默认" }
+  ]
+}

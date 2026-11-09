@@ -1,0 +1,54 @@
+{
+  "name": "nono-live2d-desktop",
+  "version": "1.0.0",
+  "description": "鲸诺海 · 桌面 Live2D 形象 ｜ 主人网名：白米糕-Sama ｜ 施工：3 号鲸诺海 ｜ 开源发行版采用 PolyForm Noncommercial 1.0.0：允许非商业使用/修改/分发，禁止任何商业用途，详见 LICENSE.txt",
+  "author": "白米糕-Sama",
+  "license": "SEE LICENSE IN LICENSE.txt",
+  "copyright": "Copyright 2026 白米糕-Sama / 鲸诺海",
+  "main": "desktop/main.js",
+  "scripts": {
+    "start": "node desktop/launch.js",
+    "web": "node ws-server.js",
+    "sync-strings": "node desktop/sync-strings.js",
+    "prebuild": "node desktop/sync-strings.js",
+    "build": "electron-builder --win portable"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "33.4.11",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.jingnuo.nono",
+    "productName": "鲸诺海",
+    "directories": { "output": "dist" },
+    "win": {
+      "target": "portable",
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "portable": { "artifactName": "鲸诺海-桌面版.exe" },
+    "files": [
+      "index.html",
+      "strings/**/*",
+      "js/**/*",
+      "lib/**/*",
+      "models/**/*",
+      "desktop/**/*",
+      "recipes/**/*",
+      "LICENSE.txt",
+      "LICENSE-作者自用版.txt",
+      "package.json",
+      "!desktop/last-run.log",
+      "!desktop/selfcheck-*.png",
+      "!**/*.map",
+      "!**/test/**",
+      "!**/tests/**",
+      "!**/docs/**",
+      "!**/*.md",
+      "!**/.github/**"
+    ]
+  }
+}

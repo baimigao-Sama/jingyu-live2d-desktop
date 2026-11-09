@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>diag5</title></head>
+<body style="font-family:monospace;font-size:13px;white-space:pre-wrap" id="out"></body>
+<script>
+  var L = [];
+  function p(s) { L.push(s); document.getElementById('out').textContent = L.join('\n'); }
+  window.onerror = function (msg, src, line) { p('!! ERR: ' + msg + ' @' + (src || '?').split('/').pop() + ':' + line); return false; };
+  window.addEventListener('unhandledrejection', function (e) { p('!! REJ: ' + (e.reason && e.reason.message ? e.reason.message : e.reason)); });
+</script>
+<script src="../lib/pixi.min.js"></script>
+<script src="../lib/live2dcubismcore.min.js"></script>
+<script src="../lib/cubism4.min.js"></script>
+<script src="../js/behavior.js"></script>
+<script>
+  function v(cm, id) { return cm.getParameterValueByIndex(cm.getParameterIndex(id)); }
+  function step(b, n) { for (var i = 0; i < n; i++) b.update(1 / 60); }
+
+  (async function () {
+    try {
+      var app = new PIXI.Application({ backgroundAlpha: 0, width: 420, height: 620, antialias: false });
+      var model = await PIXI.live2d.Live2DModel.from('../models/nono.model3.json', { autoInteract: false });
+      app.stage.addChild(model);
+      var cm = model.internalModel.coreModel;
+      p('模型 OK  param=' + cm.getParameterCount() + '  drawable=' + cm.getDrawableCount());
+
+      var mock = { ticker: { add: function () {}, deltaMS: 16.7 } };
+      var b = new window.NonoBehavior(model, mock);
+
+      // 参数存在性
+      ['ParamEyeBallX','ParamEyeLOpen','ParamBreath','key7','ParamMouthForm','Param_Angle_Rotation84']
+        .forEach(function (id) { p('exists ' + id + '=' + b.exists(id)); });
+
+      // 1) 呼吸 + 眼珠：鼠标刚动，眼睛跟到右侧
+      b.lastMouseMove = performance.now();
+      b.mouseX = 0.9; b.mouseY = 0.5;
+      step(b, 90);
+      p('跟随鼠标 eyeBallX=' + v(cm,'ParamEyeBallX').toFixed(3) + '  breath(动过)=' + (Math.abs(v(cm,'ParamBreath')) > 0.0001));
+
+      // 2) 停住 3 秒 → 应回正（负值，看着屏幕中心偏左）
+      b.lastMouseMove = performance.now() - 3000;
+      step(b, 90);
+      p('停3秒回正 eyeBallX=' + v(cm,'ParamEyeBallX').toFixed(3) + '  (期望 < 0)');
+
+      // 3) 停 12 秒 → 开始自己飘
+      b.lastMouseMove = performance.now() - 12000;
+      step(b, 30);
+      p('停12秒飘眼 wanderTarget=' + JSON.stringify(b.wanderTarget));
+
+      // 4) 表情 shy → key7（脸红开关）应起来
+      b.applyCommand({ action: 'expression', name: 'shy', intensity: 1 });
+      step(b, 90);
+      p('shy  key7=' + v(cm,'key7').toFixed(3) + '  angleZ=' + v(cm,'ParamAngleZ').toFixed(3));
+
+      // 5) 表情结束后参数要回基线（2 号版本的 bug）
+      b.expr.until = performance.now() - 1;
+      step(b, 90);
+      p('表情淡出后 key7=' + v(cm,'key7').toFixed(3) + '  (期望接近 0)');
+
+      // 6) 口型：不匀速，多次取样看有没有起伏
+      b.applyCommand({ action: 'mouth', value: 0.7 });
+      var mouths = [];
+      for (var i = 0; i < 40; i++) { step(b, 6); mouths.push(v(cm, 'ParamMouthOpenY')); }
+      var uniq = {}; mouths.forEach(function (x) { uniq[x.toFixed(3)] = 1; });
+      p('口型采样不同值=' + Object.keys(uniq).length + '  (期望 > 2，不是常量)');
+
+      // 7) preset / motion / look / reset 都不该抛
+      ['preset','motion','look','reset'].forEach(function (a) {
+        try {
+          b.applyCommand({ action: a, name: '脸红', group: 'Idle', value: 'away' });
+          p('指令 ' + a + ' OK');
+        } catch (e) { p('指令 ' + a + ' 失败: ' + e.message); }
+      });
+
+      p('errs=' + (window.__errs || []).length);
+      p('=== DONE ===');
+    } catch (e) {
+      p('失败: ' + (e && e.message ? e.message : e));
+      if (e && e.stack) p(String(e.stack).split('\n').slice(0, 6).join('\n'));
+      p('=== FAIL ===');
+    }
+  })();
+</script>
+</html>

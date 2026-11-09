@@ -1,0 +1,182 @@
+╔══════════════════════════════════════════════════════════════════════╗
+║  鲸诺海 · 桌面 Live2D 形象（nono-live2d-desktop）                      ║
+║  开源发行版授权文件                                                    ║
+║  Copyright (c) 2026 白米糕-Sama / 鲸诺海。保留所有权利。                ║
+╚══════════════════════════════════════════════════════════════════════╝
+
+本文件共三部分：
+  一、中文说明（允许什么、禁止什么、素材归属）
+  二、PolyForm Noncommercial License 1.0.0 官方英文全文
+  三、Required Notice（分发时必须一起带上的版权行）
+
+作者本人自用的构建另见《LICENSE-作者自用版.txt》。
+
+──────────────────────────────────────────────────────────────────────
+一、中文说明
+──────────────────────────────────────────────────────────────────────
+
+1. 适用版本
+   本许可适用于对外公开发布的「开源发行版」源码与构建产物（含 .exe）。
+   作者本人本机自用的构建见《LICENSE-作者自用版.txt》，不受本许可约束；
+   但任何对外提供的副本，自动适用本许可。
+
+2. 授权方式
+   开源发行版采用 PolyForm Noncommercial License 1.0.0（下文英文全文）。
+   核心是：
+     ✅ 允许：任何**非商业目的**的使用，包括个人自用、学习、研究、
+             爱好项目、非营利组织使用
+     ✅ 允许：修改（改代码、改参数、改台词都行），也允许基于本项目做新作品
+     ✅ 允许：非商业分发（发给朋友、分享网盘、转载）
+     ❌ 禁止：任何商业用途（出售、付费下载、商业捆绑、商业宣传、付费直播等）
+     ❌ 禁止：把本项目或修改版用于商业产品 / 商业服务
+
+3. 分发时必须做的事
+   把本软件（原版或修改版）提供给任何人时，必须同时提供：
+     · 本许可条款，或它的网址：https://polyformproject.org/licenses/noncommercial/1.0.0/
+     · 下面第三节的 `Required Notice:` 行原文
+   不要求公开修改后的源码，但不得删除或伪造版权声明。
+
+4. 模型素材归属（不在本许可范围内）
+   models/ 目录下的 Live2D 模型《大肥鱼》版权归原作者所有：
+     原画及拆分：神宫凉子
+     Live2D 建模：霓虹猫_NeonNeko
+   模型为免费公开配布，使用须遵守原作者配布条款。
+   本项目仅对自身代码享有著作权，不对模型素材主张任何权利，也无权转授。
+   本项目随包提供模型仅为方便运行；能否再分发以原作者配布条款为准，
+   如原作者条款不允许，请自行从原作者处获取模型，或联系本项目作者移除。
+   不得单独提取模型文件转售或用于任何商业用途；
+   随包分发时必须保留 THIRD-PARTY.txt 中的署名与来源说明。
+
+5. 违约
+   违反上述条款的，版权人的授权自动终止；版权人将要求立即停止侵权、
+   消除影响，并保留追究法律责任及索赔的权利。
+
+──────────────────────────────────────────────────────────────────────
+二、PolyForm Noncommercial License 1.0.0（官方英文全文）
+   来源：https://polyformproject.org/licenses/noncommercial/1.0.0/
+──────────────────────────────────────────────────────────────────────
+
+# PolyForm Noncommercial License 1.0.0
+
+<licensor> https://polyformproject.org/licenses/noncommercial/1.0.0
+
+## Acceptance
+
+In order to get any license under these terms, you must agree to them as both
+strict obligations and conditions to all your licenses.
+
+## Copyright License
+
+The licensor grants you a copyright license for the software to do everything
+you might do with the software that would otherwise infringe the licensor's
+copyright in it for any permitted purpose. However, you may only distribute the
+software according to the Distribution License and make changes or new works
+based on the software according to the Changes and New Works License.
+
+## Distribution License
+
+The licensor grants you an additional copyright license to distribute copies of
+the software. Your license to distribute covers distributing the software with
+changes and new works permitted by the Changes and New Works License.
+
+## Notices
+
+You must ensure that anyone who gets a copy of any part of the software from you
+also gets a copy of these terms or the URL for them above, as well as copies of
+any plain-text lines beginning with `Required Notice:` that the licensor provided
+with the software. For example:
+
+> Required Notice: Copyright Yoyodyne, Inc. (http://example.com)
+
+## Changes and New Works License
+
+The licensor grants you an additional copyright license to make changes and new
+works based on the software for any permitted purpose.
+
+## Patent License
+
+The licensor grants you a patent license for the software that covers patent
+claims the licensor can license, or becomes able to license, that you would
+infringe by using the software.
+
+## Noncommercial Purposes
+
+Any noncommercial purpose is a permitted purpose.
+
+## Personal Uses
+
+Personal use for research, experiment, and testing for the benefit of public
+knowledge, personal study, private entertainment, hobby projects, amateur
+pursuits, or religious observance, without any anticipated commercial
+application, is use for a permitted purpose.
+
+## Noncommercial Organizations
+
+Use by any charitable organization, educational institution, public research
+organization, public safety or health organization, environmental protection
+organization, or government institution is use for a permitted purpose regardless
+of the source of funding or obligations resulting from the funding.
+
+## Fair Use
+
+You may have "fair use" rights for the software under the law. These terms do not
+limit them.
+
+## No Other Rights
+
+These terms do not allow you to sublicense or transfer any of your licenses to
+anyone else, or prevent the licensor from granting licenses to anyone else.
+These terms do not imply any other licenses.
+
+## Patent Defense
+
+If you make any written claim that the software infringes or contributes to
+infringement of any patent, your patent license for the software granted under
+these terms ends immediately. If your company makes such a claim, your patent
+license ends immediately for work on behalf of your company.
+
+## Violations
+
+The first time you are notified in writing that you have violated any of these
+terms, or done anything with the software not covered by your licenses, your
+licenses can nonetheless continue if you come into full compliance with these
+terms, and take practical steps to correct past violations, within 32 days of
+receiving notice. Otherwise, all your licenses end immediately.
+
+## No Liability
+
+***As far as the law allows, the software comes as is, without any warranty or
+condition, and the licensor will not be liable to you for any damages arising out
+of these terms or the use or nature of the software, under any kind of legal
+claim.***
+
+## Definitions
+
+The *licensor* is the individual or entity offering these terms, and the
+*software* is the software the licensor makes available under these terms.
+
+*You* refers to the individual or entity agreeing to these terms.
+
+*Your company* is any legal entity, sole proprietorship, or other kind of
+organization that you work for, plus all organizations that have control over,
+are under the control of, or are under common control with that organization.
+*Control* means ownership of substantially all the assets of an entity, or the
+power to direct its management and policies by vote, contract, or otherwise.
+Control can be direct or indirect.
+
+*Your licenses* are all the licenses granted to you for the software under
+these terms.
+
+*Use* means anything you do with the software requiring one of your licenses.
+
+──────────────────────────────────────────────────────────────────────
+三、Required Notice（分发时必须原样带上）
+──────────────────────────────────────────────────────────────────────
+
+Required Notice: Copyright (c) 2026 白米糕-Sama / 鲸诺海（鲸诺海 · 桌面 Live2D 形象 nono-live2d-desktop）
+
+──────────────────────────────────────────────────────────────────────
+生效日期：2026-11-07（2026-11-09 由 PolyForm Strict 改为 PolyForm Noncommercial 1.0.0）
+许可人：白米糕-Sama（鲸诺海）
+如需商业授权、合作或商业分发，请先联系作者取得书面许可。
+──────────────────────────────────────────────────────────────────────

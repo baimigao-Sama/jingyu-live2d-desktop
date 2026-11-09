@@ -1,0 +1,997 @@
+/* 鲸诺海 · 行为系统（3 号接手版）
+ * 依据：《行为设计-诺诺桌面形象.md》
+ * 原则：一切不匀速。宁可发呆，别像机器。
+ *
+ * 相对 2 号（豆包）版本修掉的三处硬伤：
+ *   1. mouseActive 是个只升不降的布尔 → 鼠标停住后永远不回正、不飘眼、不打呵欠
+ *   2. 表情结束后只清了 key* 开关，其它参数（歪头、嘴角）会一直挂着
+ *   3. mouth 指令是常量张嘴，像广播体操；改成有停顿、有随机的说话节奏
+ * 另补：状态机十态、motion、互动层、彩蛋、桌面全局光标的时间戳判定。
+ */
+(function () {
+  'use strict';
+
+  var rand = function (a, b) { return a + Math.random() * (b - a); };
+  var clamp = function (v, a, b) { return Math.max(a, Math.min(b, v)); };
+
+  // 语义表情 → 参数目标。参数名已逐个对过 大肥鱼.cdi3.json（509 个）。
+  // 模型自带的 Exp3 是 key1~13 开关，用于 preset 指令，不与这里混用，
+  // 免得 expressionManager 每帧覆盖参数。
+  // 0号裁决:脱捕动作永不播(黑影吓人)。文件保留,只进排除名单。
+  var EXCLUDED_MOTIONS = ['脱捕'];
+  // 0号定的映射表:语义表情 → 叠预设 + 配动作(只走 MCP/菜单路径,互动层自管)
+  // 自查修复:表情幅度放大1.4倍(小海:表情看不出来)——在目标值乘完后统一放大
+  var EXPR_BOOST = 1.4;
+  var PRESET_FOR = { happy: '爱心眼', excited: '爱心眼', sad: '流泪', surprised: '圈圈眼', serious: '单片眼镜', shy: '脸红', angry: '黑脸' };
+  var MOTION_FOR = { happy: '默认手切举手', excited: '竖手指切出来动画' };
+  var EXPRESSIONS = {
+    idle:      function () { return {}; },
+    thinking:  function (i) { return { ParamEyeBallY: -0.35 * i, ParamAngleZ: 6 * i, ParamBrowInnerUp: 0.35 * i }; },
+    typing:    function (i) { return { ParamEyeBallY: 0.15 * i, ParamMouthOpenY: 0.12 * i }; },
+    happy:     function (i) { return { EyeSmile: 0.65 * i, ParamMouthForm: 0.5 * i, ParamAngleZ: 3 * i }; },
+    smile:     function (i) { return { EyeSmile: 0.6 * i, ParamMouthForm: 0.45 * i, ParamAngleZ: 2 * i }; },
+    shy:       function (i) { return { key7: 1 * i, ParamEyeBallY: 0.35 * i, ParamAngleZ: 9 * i, ParamMouthForm: -0.2 * i }; },
+    sad:       function (i) { return { ParamBrowLY: -0.35 * i, ParamBrowRY: -0.35 * i, ParamMouthForm: -0.45 * i, eyeBase: 1 - 0.08 * i }; },
+    serious:   function (i) { return { EyeSmile: -0.2 * i, ParamMouthForm: -0.15 * i, ParamAngleX: 2 * i }; },
+    sleepy:    function (i) { return { eyeBase: 1 - 0.3 * i, ParamEyeBallY: 0.3 * i, ParamAngleX: 7 * i }; },
+    proud:     function (i) { return { EyeSmile: 0.6 * i, ParamMouthForm: 0.55 * i, ParamAngleX: -8 * i, ParamBodyAngleX: -3 * i }; },
+    greeting:  function (i) { return { EyeSmile: 0.8 * i, ParamMouthForm: 0.5 * i, ParamAngleZ: 4 * i }; },
+    playful:   function (i) { return { EyeSmile: 0.4 * i, ParamMouthForm: 0.75 * i, ParamAngleZ: 8 * i }; },
+    excited:   function (i) { return { EyeSmile: 0.5 * i, ParamMouthOpenY: 0.25 * i, ParamAngleX: -4 * i }; },
+    angry:     function (i) { return { Angry: 0.7 * i, ParamBrowLY: 0.5 * i, ParamBrowRY: 0.5 * i, CheeckPuff: 0.4 * i }; },
+    surprised: function (i) { return { SHOCKEYE: 0.85 * i, ParamMouthOpenY: 0.5 * i }; }
+  };
+
+  // 空闲小动作：3-10 分钟随机一个，一次只做一个，做完有停顿
+  var IDLE_ACTIONS = [
+    { name: '歪头看旁边', dur: 1.6, targets: { ParamAngleZ: 10, ParamEyeBallX: 0.5 } },
+    { name: '抬眼看上面', dur: 2.0, targets: { ParamEyeBallY: -0.6, ParamAngleY: -9 } },
+    { name: '低头看手',   dur: 1.8, targets: { ParamAngleX: 12, ParamEyeBallY: 0.5 } },
+    { name: '伸懒腰',     dur: 2.2, targets: { ParamBodyAngleX: -7, ParamMouthOpenY: 0.22, ParamAngleX: 4 } },
+    { name: '小声叹气',   dur: 1.5, targets: { ParamMouthOpenY: 0.16, ShoulderY: 6 } },
+    { name: '玩尾巴',     dur: 2.0, targets: { Param_Angle_Rotation84: 24, Param_Angle_Rotation85: 30, Param_Angle_Rotation86: 32 } },
+    { name: '摸耳鳍',     dur: 1.5, targets: { ParamAngleZ: 5, ParamEyeBallY: -0.2 } },
+    { name: '突然挺直',   dur: 0.9, targets: { ParamAngleX: 0, ParamAngleY: 0, ParamAngleZ: 0 } },
+    { name: '想事情',     dur: 2.6, targets: { ParamEyeBallY: -0.55, ParamAngleZ: 8, ParamBrowInnerUp: 0.3, ParamAngleY: -6 } }
+  ];
+
+  var SWITCH_PARAMS = ['Angry', 'SHOCKEYE', 'CheeckPuff', 'EyeSmile', 'JawOpen', 'ShoulderY'];
+
+  function NonoBehavior(model, app) {
+    this.model = model;
+    this.app = app;
+    this.core = model.internalModel.coreModel;
+    this.rangeCache = {};
+    this.idxCache = {};
+    this.targets = {};
+
+    // 鼠标：一律用「最后一次真实移动的时间」判断，不用布尔
+    this.mouseX = 0.5; this.mouseY = 0.5;
+    this.lastMouseMove = performance.now();
+    this.lastMouseSpeed = 0;
+    this.pointerInside = false;
+
+    this.breathP = Math.random();
+    this.breathSpeed = 0.045;
+
+    // 眨眼
+    this.blinkState = 'open';
+    this.blinkT = 0;
+    this.blinkNextAt = performance.now() + rand(8000, 15000);
+    this.blinkCount = 1;
+    this.blinkAsym = false;           // 彩蛋：两眼不一样快
+    this.eyeCmd = 1;                  // eyeopen 指令
+    this.eyeExpr = 1;                 // 表情压低
+    this.eyeTime = 1;                 // 时段压低
+    this.blinkMode = 'auto';          // MCP set_blink：auto / stop / slow / one
+    this.blinkStopUntil = 0;          // stop 最多 3 秒，自动恢复（安全默认值）
+
+    // MCP look_at：视线覆盖
+    this.lookMode = null;
+    this.lookUntil = 0;
+
+    // petbox 同款·待机摇摆:呼吸之外的轻身体摆(肩/身/头,各自相位不同——像活着)
+    this.swayT = Math.random() * 6.28;
+    this.swayAmp = 1;
+    // 空闲动作
+    this.idleAction = null;
+    // 首个动作提前到 20-45 秒(小海要看得到"她在动"),之后回归 3-10 分钟的正常节奏
+    this.idleNextAt = performance.now() + (20000 + Math.random() * 25000);
+    this.lastActionName = null;
+
+    // 时间感
+    this.timeBucket = this.bucketNow();
+    this.dozeNextAt = performance.now() + rand(20000, 40000);
+
+    // 发呆
+    this.wanderTarget = null;
+    this.wanderTimer = 0;
+    this.yawned = false;
+    this.lazyUntil = 0;
+
+    // 表情：结束时能把每一个参数放回基线
+    this.expr = null;
+    this.exprTouched = [];
+    this.exprTargets = {};
+    this.holdExpr = false;
+
+    // 口型（用帧累积时钟，不受后台节流影响）
+    this.frameTime = 0;
+    this.speakUntil = 0;
+    this.speakLevel = 0;
+    this.speakNext = 0;
+    this.speakOpen = 0;
+    this.mouthCmd = null;
+    this.sayPlan = null;              // MCP say：按文本编好的音节节奏
+    this.sayText = '';
+    this.sayLastUnit = 0;             // 咕哝音:当前音节序号(换音节时出声)
+    this.presetActive = false;        // 叠加的 exp3 预设是否在(过期要复位)
+
+    // MCP get_state 用
+    this.lastInteractionAt = performance.now();
+
+    // 互动
+    this.clickTimes = [];
+    this.hoverSince = 0;
+    this.dragging = false;
+    this.interactive = false;   // 桌面版穿透时不接点击；托盘切「可拖动」才为 true
+
+    // 主动 / 彩蛋（小海 2026-11-04 点单）
+    this.prevIdleMs = 0;              // welcome 检测：上一帧的静止时长
+    this.onWelcome = null;            // 他回来了（静止≥10分钟后再动）→ 渲染层接气泡
+    this.onHiccup = null;             // 打嗝彩蛋 → 渲染层接音效+气泡
+    this.dawnLookNextAt = 0;          // 凌晨歪头看他
+    this.tailTwitchNextAt = performance.now() + rand(120000, 300000);
+    this.hiccupNextAt = performance.now() + rand(50 * 60000, 150 * 60000);
+    this.circleBuf = [];              // 追圈彩蛋：最近鼠标轨迹
+    this.circleCoolUntil = 0;
+    this.circleUntil = 0;
+
+    // 0号 2026-11-04 想法①：她知道自己在忙什么（set_activity）
+    this.activity = 'idle';
+    this.activityUntil = 0;           // Infinity = 一直保持
+    // 0号想法②：小诺（DSH）在不在线——在的时候她更精神，不在时安静
+    this.companionOnline = null;      // null=未知
+    // 0号想法③b：尾巴记仇（数次数，不靠随机）
+    this.tailStrikes = 0;
+    this.tailLastAt = 0;
+    this.tailHiddenUntil = 0;         // 尾巴卷起来藏身后，5分钟内一碰就躲
+    // 0号想法③c：凌晨会睡着（3点后20分钟没动静），被鼠标惊醒
+    this.sleepState = '';             // '' | 'asleep'
+    // 0号第三轮任务二：play_plan 时间轴（逐帧 tick，不用 setTimeout，打断最干净）
+    this.plan = null;                 // { steps, interruptible, t0, playing }
+
+    this.attachMouseEvents();
+  }
+
+  NonoBehavior.prototype.start = function () {
+    this.app.ticker.add(function () { this.update(this.app.ticker.deltaMS / 1000); }, this);
+  };
+
+  /* ---------- 参数工具 ---------- */
+  // Cubism 4/5 的 framework 里，getParameterMinimumValue / MaximumValue 收的是
+  // 参数「索引」，不是参数名。2 号版本传了 id 字符串，拿到 undefined，
+  // 于是所有 target 算成 NaN —— 整套行为系统其实没生效。这里一律走索引 API。
+  NonoBehavior.prototype.index = function (id) {
+    if (!(id in this.idxCache)) {
+      try { this.idxCache[id] = this.core.getParameterIndex(id); }
+      catch (e) { this.idxCache[id] = -1; }
+    }
+    return this.idxCache[id];
+  };
+  NonoBehavior.prototype.range = function (id) {
+    if (!(id in this.rangeCache)) {
+      var idx = this.index(id);
+      if (idx < 0) {
+        this.rangeCache[id] = null;
+      } else {
+        try {
+          var min = this.core.getParameterMinimumValue(idx);
+          var max = this.core.getParameterMaximumValue(idx);
+          this.rangeCache[id] = isFinite(min) && isFinite(max) && max !== min
+            ? { idx: idx, min: min, max: max } : null;
+        } catch (e) { this.rangeCache[id] = null; }
+      }
+    }
+    return this.rangeCache[id];
+  };
+  NonoBehavior.prototype.exists = function (id) {
+    return this.range(id) !== null;
+  };
+  NonoBehavior.prototype.neutral = function (id) {
+    var r = this.range(id);
+    if (!r) return 0;
+    // 开关类（key1~13 / Angry / SHOCKEYE…）基线是关 = 最小值
+    if (id.indexOf('key') === 0 || SWITCH_PARAMS.indexOf(id) >= 0) return r.min;
+    // 角度、眼珠、嘴、眉这类以中点为「回正」
+    if (id.indexOf('EyeBall') >= 0 || id.indexOf('Angle') >= 0 ||
+        id.indexOf('Mouth') >= 0 || id.indexOf('Brow') >= 0) return (r.min + r.max) / 2;
+    return r.min;
+  };
+  NonoBehavior.prototype.setNorm = function (id, v01) {
+    if (!this.exists(id)) return;
+    var r = this.range(id); if (!r) return;
+    this.targets[id] = r.min + (r.max - r.min) * clamp(v01, 0, 1);
+  };
+  NonoBehavior.prototype.setSigned = function (id, v) {
+    if (!this.exists(id)) return;
+    var r = this.range(id); if (!r) return;
+    var mid = (r.min + r.max) / 2, half = (r.max - r.min) / 2;
+    this.targets[id] = mid + half * clamp(v, -1, 1);
+  };
+  NonoBehavior.prototype.setRaw = function (id, v) {
+    if (!this.exists(id)) return;
+    var r = this.range(id); if (!r) return;
+    this.targets[id] = clamp(v, r.min, r.max);
+  };
+  NonoBehavior.prototype.setNow = function (id, v) {
+    var r = this.range(id);
+    if (r && isFinite(v)) this.core.setParameterValueByIndex(r.idx, clamp(v, r.min, r.max));
+  };
+  NonoBehavior.prototype.getNow = function (id) {
+    var r = this.range(id);
+    return r ? this.core.getParameterValueByIndex(r.idx) : 0;
+  };
+  NonoBehavior.prototype.lerpTo = function (id, dt) {
+    var t = this.targets[id];
+    if (t === undefined || !isFinite(t)) return;
+    var r = this.range(id);
+    if (!r) return;
+    var cur = this.core.getParameterValueByIndex(r.idx);
+    var k = 1 - Math.pow(0.001, dt * this.speedOf(id));
+    this.core.setParameterValueByIndex(r.idx, cur + (t - cur) * k);
+  };
+  NonoBehavior.prototype.speedOf = function (id) {
+    if (id.indexOf('EyeBall') >= 0) return 18;
+    if (id.indexOf('Angle') >= 0 || id.indexOf('BodyAngle') >= 0) return 6;
+    if (id.indexOf('Mouth') >= 0) return 12;
+    if (id.indexOf('key') === 0 || SWITCH_PARAMS.indexOf(id) >= 0) return 9;
+    return 10;
+  };
+
+  /* ---------- 呼吸：吸气慢、呼气快，幅度随时间段 ---------- */
+  NonoBehavior.prototype.updateBreath = function (dt) {
+    var slow = this.timeBucket === 'dawn' || this.timeBucket === 'night';
+    // 0号想法②：小诺在线时她更精神（呼吸略提），不在线时安静；睡着时最慢
+    var mood = this.sleepState === 'asleep' ? 0.4
+      : this.companionOnline === false ? 0.92
+      : this.companionOnline ? 1.06 : 1;
+    var speed = this.breathSpeed * (slow ? 0.55 : 1) * mood * rand(0.92, 1.08);
+    this.breathP += dt * speed;
+    if (this.breathP > 1) this.breathP -= 1;
+    var p = this.breathP, b;
+    if (p < 0.45) b = 0.5 - 0.5 * Math.cos((p / 0.45) * Math.PI);
+    else b = 0.5 + 0.5 * Math.cos(((p - 0.45) / 0.55) * Math.PI);
+    var amp = this.timeBucket === 'morning' ? 0.55 : (slow ? 0.42 : 0.5);
+    this.setNorm('ParamBreath', 0.25 + amp * b);
+  };
+
+  /* ---------- 眨眼：不匀速、偶发连眨、偶发两眼不同步 ---------- */
+  NonoBehavior.prototype.triggerBlink = function (double) {
+    if (this.blinkState !== 'open') return;
+    this.blinkState = 'closing';
+    this.blinkT = 0;
+    this.blinkCount = double ? 2 : (Math.random() < 0.12 ? 2 : 1);
+    this.blinkAsym = Math.random() < 0.005;
+  };
+  NonoBehavior.prototype.updateBlink = function (dt) {
+    var now = performance.now();
+    // MCP set_blink: stop = 睁着眼不动，但绝不让她卡住——3 秒后强制回 auto
+    if (this.blinkMode === 'stop') {
+      if (now >= this.blinkStopUntil) {
+        this.blinkMode = 'auto';
+      } else {
+        var b = Math.min(this.eyeCmd, this.eyeExpr, this.eyeTime);
+        this.setNow('ParamEyeLOpen', b);
+        this.setNow('ParamEyeROpen', b);
+        return;
+      }
+    }
+    var slow = this.timeBucket === 'dawn' || this.timeBucket === 'night';
+    var interval = this.timeBucket === 'dawn' ? rand(15, 25)
+      : slow ? rand(12, 20)
+      : this.timeBucket === 'morning' ? rand(10, 18) : rand(8, 15);
+    if (this.blinkMode === 'slow') interval *= 2.5;
+    if (this.blinkState === 'open' && now > this.blinkNextAt) this.triggerBlink(false);
+
+    var eye = 1;
+    switch (this.blinkState) {
+      case 'closing':
+        this.blinkT += dt; eye = 1 - clamp(this.blinkT / 0.07, 0, 1);
+        if (this.blinkT >= 0.07) { this.blinkState = 'closed'; this.blinkT = 0; }
+        break;
+      case 'closed':
+        this.blinkT += dt; eye = 0;
+        if (this.blinkT >= 0.04) { this.blinkState = 'opening'; this.blinkT = 0; }
+        break;
+      case 'opening':
+        this.blinkT += dt; eye = clamp(this.blinkT / 0.09, 0, 1);
+        if (this.blinkT >= 0.09) {
+          this.blinkCount--;
+          if (this.blinkCount > 0) { this.blinkState = 'closing'; this.blinkT = 0; }
+          else { this.blinkState = 'open'; this.blinkNextAt = now + interval * 1000; }
+        }
+        break;
+    }
+    var base = Math.min(this.eyeCmd, this.eyeExpr, this.eyeTime);
+    var l = base * eye, r = base * eye;
+    if (this.blinkAsym && this.blinkState !== 'open') r = base * clamp(eye + 0.25, 0, 1);
+    this.setNow('ParamEyeLOpen', l);
+    this.setNow('ParamEyeROpen', r);
+  };
+
+  /* ---------- 眼睛：跟鼠标 / 停 2 秒回正 / 停 10 秒自己飘 / 停 60 秒打呵欠 ---------- */
+  NonoBehavior.prototype.updateLook = function (dt) {
+    var now = performance.now();
+    var idleMs = now - this.lastMouseMove;
+
+    // 他回来了：静止超过 10 分钟后鼠标重新动 → 立刻抬头，眼睛亮一下
+    // （0号《行为设计》4.4：不打扰，但看得见）
+    if (this.prevIdleMs > 600000 && idleMs < 2000) {
+      this.lookMode = null; this.lookUntil = 0;
+      this.setExpression('excited', 0.7, false, 2200);
+      this.idleAction = { name: '看他回来', dur: 0.8, t0: now,
+        targets: { ParamAngleX: -6, ParamEyeBallY: -0.3 } };
+      if (this.onWelcome) { try { this.onWelcome(this.prevIdleMs); } catch (e) {} }
+    }
+    this.prevIdleMs = idleMs;
+
+    // MCP look_at：覆盖式，期间真实鼠标不抢视线；到点自动回 cursor
+    if (this.lookMode && this.lookMode !== 'cursor' && now < this.lookUntil) {
+      var ox = 0, oy = 0;
+      if (this.lookMode === 'user') { ox = -0.15; oy = -0.05; }       // 屏幕中心偏左，小海坐的位置
+      else if (this.lookMode === 'away') { ox = 0.7; oy = 0.05; }
+      else if (this.lookMode === 'down') { ox = 0; oy = 0.62; }
+      this.setSigned('ParamEyeBallX', ox);
+      this.setSigned('ParamEyeBallY', oy);
+      this.setRaw('ParamAngleX', oy * 10);
+      this.setRaw('ParamAngleY', ox * 8);
+      this.setRaw('ParamAngleZ', 0);
+      return;
+    }
+    if (this.lookMode && now >= this.lookUntil) this.lookMode = null;
+
+    var ex = 0, ey = 0, ax = 0, ay = 0, az = 0;
+
+    if (idleMs < 2000) {
+      // 跟着真实鼠标。桌面版拿到的是屏幕绝对坐标换算后的值，可能越界，先夹住
+      ex = clamp((this.mouseX - 0.5) * 2, -1, 1) * 0.82;
+      ey = clamp((0.5 - this.mouseY) * 2, -1, 1) * 0.82;
+      ax = ey * 14; ay = ex * 11; az = ex * -4;   // 头是眼睛的 1/4 左右
+      this.yawned = false; this.lazyUntil = 0;
+      this.wanderTarget = null;
+    } else if (idleMs > 60000 && !this.yawned) {
+      this.yawned = true;
+      this.idleAction = { name: '打呵欠', dur: 1.8, t0: now,
+        targets: { ParamMouthOpenY: 0.55, ParamAngleX: 5 } };
+      this.lazyUntil = now + 25000;
+      ex = -0.12; ey = 0.05; ax = -2; ay = -4;
+    } else if (idleMs > 10000) {
+      // 自己飘：看旁边、看下面、再看回中心
+      if (!this.wanderTarget || now > this.wanderTimer) {
+        var opts = [{ ex: 0.4, ey: -0.1 }, { ex: -0.35, ey: 0.05 }, { ex: 0.1, ey: 0.45 },
+                    { ex: -0.1, ey: -0.3 }, { ex: 0, ey: 0 }];
+        this.wanderTarget = opts[Math.floor(Math.random() * opts.length)];
+        this.wanderTimer = now + rand(3000, 6500);
+      }
+      ex = this.wanderTarget.ex * 0.7; ey = this.wanderTarget.ey * 0.7;
+      ax = ey * 6; ay = ex * 5; az = ex * -2;
+    } else {
+      // 鼠标停住 2 秒：慢慢回正，看着屏幕中心偏左（小海坐的位置）
+      ex = -0.15; ey = -0.05; ax = -2; ay = -5; az = 0;
+    }
+
+    this.setSigned('ParamEyeBallX', ex);
+    this.setSigned('ParamEyeBallY', ey);
+    this.setRaw('ParamAngleX', ax);
+    this.setRaw('ParamAngleY', ay);
+    this.setRaw('ParamAngleZ', az);
+
+    this.eyeTime = (this.timeBucket === 'dawn') ? 0.92
+      : (this.timeBucket === 'night') ? 0.97
+      : (this.lazyUntil && now > this.lazyUntil) ? 0.9 : 1;
+  };
+
+  /* ---------- 时间感：跟着电脑时钟，小海昼夜颠倒所以深夜最要紧 ---------- */
+  NonoBehavior.prototype.bucketNow = function () {
+    var h = new Date().getHours();
+    if (h >= 6 && h < 9) return 'morning';
+    if (h >= 9 && h < 18) return 'day';
+    if (h >= 18 && h < 22) return 'evening';
+    if (h >= 22 || h < 3) return 'night';
+    return 'dawn';
+  };
+  NonoBehavior.prototype.updateTimeSense = function () {
+    var b = this.bucketNow();
+    if (b !== this.timeBucket) {
+      this.timeBucket = b;
+      this.idleNextAt = performance.now() + this.idleGap();
+    }
+    if (b === 'dawn' && this.sleepState !== 'asleep' && performance.now() > this.dozeNextAt) {
+      this.dozeNextAt = performance.now() + rand(15000, 35000);
+      this.idleAction = { name: '打瞌睡', dur: 1.1, t0: performance.now(),
+        targets: { ParamAngleX: 9 } };
+    }
+    // 凌晨他还在：歪头看他一眼，眼神软下来，眼里有点心疼
+    // （0号 4.4 第三条。90-180 秒一次，别盯着看）
+    if (b === 'dawn' || b === 'night') {
+      var nowMs = performance.now();
+      var stillLong = (nowMs - this.lastMouseMove) > 600000;
+      if (stillLong && nowMs > this.dawnLookNextAt && !this.idleAction) {
+        this.dawnLookNextAt = nowMs + rand(90000, 180000);
+        var self = this;
+        this.idleAction = { name: '心疼地看他', dur: 1.4, t0: nowMs,
+          targets: { ParamAngleZ: 11, ParamAngleY: -7, ParamEyeBallY: 0.18 } };
+        this.setExpression('sad', 0.35, false, 3200);
+        setTimeout(function () {
+          if (!self.idleAction) {
+            self.idleAction = { name: '心疼地收回目光', dur: 1.2, t0: performance.now(),
+              targets: { ParamAngleZ: -6, ParamEyeBallY: -0.25 } };
+          }
+        }, 1500);
+      }
+    }
+  };
+  NonoBehavior.prototype.idleGap = function () {
+    var b = this.timeBucket;
+    if (b === 'dawn') return 0;
+    if (b === 'night') return rand(300000, 720000);
+    if (b === 'morning') return rand(180000, 480000);
+    return rand(180000, 600000);
+  };
+
+  /* ---------- 随机空闲小动作 ---------- */
+  NonoBehavior.prototype.updateAction = function (dt) {
+    var now = performance.now();
+    if (this.idleAction) {
+      var a = this.idleAction;
+      for (var id in a.targets) {
+        if (id === 'eyeBase') continue;
+        if (this.exists(id)) this.targets[id] = a.targets[id];
+      }
+      if (now - a.t0 > a.dur * 1000) {
+        this.idleAction = null;
+        this.lastActionName = a.name;
+        // 做完要有停顿：把动作参数放回基线
+        for (var id2 in a.targets) if (this.exists(id2)) this.targets[id2] = this.neutral(id2);
+      }
+      return;
+    }
+    // 彩蛋：尾巴尖自己抽一下（稀有，2-5 分钟一次，和空闲动作不抢）
+    if (!this.idleAction && now > this.tailTwitchNextAt) {
+      this.tailTwitchNextAt = now + rand(120000, 300000);
+      this.idleAction = { name: '尾巴抽一下', dur: 0.55, t0: now,
+        targets: { Param_Angle_Rotation86: 16, Param_Angle_Rotation85: 8 } };
+      return;
+    }
+    // 动作库进日常(0号批):低频随机手臂动作——闲着的时候自己来一段小表演
+    if (!this.idleAction && now > (this.armMotionNextAt || 0)) {
+
+
+
+      this.armMotionNextAt = now + (240000 + Math.random() * 240000);
+
+
+
+      var SAFE_MOTIONS = ['默认手切举手', '竖手指切出来动画', '狗尾草切换出来'];
+
+
+
+      try { this.model.motion(SAFE_MOTIONS[Math.floor(Math.random() * SAFE_MOTIONS.length)]); } catch (eM) {}
+
+
+
+    }    if (this.timeBucket !== 'dawn' && now > this.idleNextAt) {
+      this.idleNextAt = now + this.idleGap();
+      var pool = IDLE_ACTIONS.filter(function (x) { return x.name !== this.lastActionName; }, this);
+      var pick = pool[Math.floor(Math.random() * pool.length)];
+      this.idleAction = { name: pick.name, dur: pick.dur + rand(0, 0.3), t0: now, targets: pick.targets };
+    }
+  };
+
+  /* ---------- 口型：有随机、有停顿、逗号停一下，不做广播体操 ----------
+   * MCP say 走的是「按文本编好的音节表」：一个字一个开合，标点处整段停，
+   * 总时长可指定；说完自动回 0。不是匀速，也不排队（新 say 直接盖掉旧的）。
+   */
+  NonoBehavior.prototype.startSay = function (text, totalMs) {
+    var chars = Array.from(String(text || '').replace(/\s+/g, ''));
+    var units = chars.map(function (c) {
+      if ('，,。.！!？?；;…~、'.indexOf(c) >= 0) return { open: 0, dur: rand(180, 420) };
+      if (Math.random() < 0.08) return { open: 0, dur: rand(90, 180) };   // 偶尔换个气
+      return { open: rand(0.2, 0.75), dur: rand(90, 210) };
+    });
+    if (!units.length) units = [{ open: 0.3, dur: 200 }];
+    var est = units.reduce(function (s, u) { return s + u.dur; }, 0);
+    if (totalMs > 0 && est > 0) {
+      var k = clamp(totalMs / est, 0.35, 3);
+      units.forEach(function (u) { u.dur *= k; });
+    }
+    this.sayText = String(text || '');
+    this.sayPlan = { units: units, i: 0, nextAt: this.frameTime };
+    this.mouthCmd = null;
+    this.speakUntil = 0;
+  };
+  NonoBehavior.prototype.updateMouth = function () {
+    var now = this.frameTime;
+    if (this.sayPlan) {
+      var p = this.sayPlan;
+      if (now >= p.nextAt) {
+        if (p.i >= p.units.length) {
+          this.sayPlan = null;
+          this.targets['ParamMouthOpenY'] = this.neutral('ParamMouthOpenY');
+          return;
+        }
+        var u = p.units[p.i++];
+        // 0号批·补充五:说话咕哝音——换音节即出声,与口型同一条时间轴
+        if (p.i !== this.sayLastUnit) {
+          this.sayLastUnit = p.i;
+          if (u.open > 0.05 && typeof window !== 'undefined' && window.NonoSfx) {
+            window.NonoSfx.speakTick(u.open);
+          }
+        }
+        this.targets['ParamMouthOpenY'] = u.open;
+        p.nextAt = now + u.dur;
+      }
+      return;
+    }
+    if (this.mouthCmd !== null) {
+      this.speakUntil = now + 1400;
+      this.speakLevel = this.mouthCmd;
+      this.mouthCmd = null;
+      this.speakNext = now;
+    }
+    if (now > this.speakUntil) {
+      this.targets['ParamMouthOpenY'] = this.neutral('ParamMouthOpenY');
+      return;
+    }
+    if (now > this.speakNext) {
+      // 大部分时候张 0.2~0.7，偶尔来个逗号/句号整段停
+      var rest = Math.random() < 0.18;
+      this.speakOpen = rest ? 0 : rand(0.18, 0.72) * this.speakLevel;
+      this.speakNext = now + (rest ? rand(180, 420) : rand(90, 210));
+    }
+    this.targets['ParamMouthOpenY'] = this.speakOpen;
+  };
+
+  /* ---------- 表情 / 指令 ---------- */
+  NonoBehavior.prototype.clearExpression = function () {
+    for (var i = 0; i < this.exprTouched.length; i++) {
+      var id = this.exprTouched[i];
+      this.targets[id] = this.neutral(id);
+    }
+    this.exprTouched = [];
+    this.exprTargets = {};
+    this.expr = null;
+    this.eyeExpr = 1;
+    this.holdExpr = false;
+  };
+  NonoBehavior.prototype.setExpression = function (name, intensity, hold, durationMs) {
+    this.clearExpression();
+    var f = EXPRESSIONS[name];
+    if (!f) { console.warn('[nono] 未知表情:', name); return; }
+    var t = f(intensity === undefined ? 1 : clamp(intensity, 0, 1));
+    this.holdExpr = !!hold;
+    // MCP 规格：duration_ms=0 一直保持（由主进程 watchdog 兜底），>0 到点回 idle，
+    // 没传则沿用原来的 9 秒自然淡出。
+    var ms = durationMs > 0 ? durationMs : (hold ? 0 : 9000);
+    this.expr = { name: name, until: ms > 0 ? performance.now() + ms : Infinity };
+    for (var id in t) {
+      if (id === 'eyeBase') { this.eyeExpr = t[id]; continue; }
+      if (!this.exists(id)) continue;
+      this.exprTouched.push(id);
+      var r = this.range(id);
+      var v = t[id];
+      // 角度类给的是「度」，是绝对值；开关类 0..1 铺满；其余按 -1..1 折半映射
+      var isSwitch = (id.indexOf('key') === 0 || SWITCH_PARAMS.indexOf(id) >= 0);
+      var goal = (id.indexOf('Angle') >= 0 && r && Math.abs(v) > 1.5)
+        ? clamp(v, r.min, r.max)
+        : isSwitch ? r.min + (r.max - r.min) * clamp(v, 0, 1)
+        : this.neutral(id) + (r ? (r.max - r.min) * v * 0.5 : 0);
+      // 自查修复:表情幅度放大——放大的是偏离中点的差值,再夹回范围内
+      var mid = (r.min + r.max) / 2;
+      this.exprTargets[id] = clamp(mid + (goal - mid) * EXPR_BOOST, r.min, r.max);
+    }
+  };
+  NonoBehavior.prototype.snapshot = function () {
+    return {
+      expression: this.expr ? this.expr.name : 'idle',
+      blinking: this.blinkMode === 'stop' ? 'stop' : (this.blinkMode === 'slow' ? 'slow' : 'auto'),
+      looking: this.lookMode || 'cursor',
+      talking: !!this.sayPlan || this.frameTime < this.speakUntil,
+      activity: this.activity,
+      last_interaction_ms: Math.round(performance.now() - this.lastInteractionAt)
+    };
+  };
+  NonoBehavior.prototype.applyCommand = function (cmd) {
+    if (!cmd || !cmd.action) return;
+    this.lastInteractionAt = performance.now();
+    switch (cmd.action) {
+      case 'expression':
+        this.setExpression(cmd.name, cmd.intensity, cmd.hold, cmd.duration_ms);
+        // 0号映射表(MCP/配方/菜单路径):预设后叠(key开关不与参数冲突)+配动作
+        var pm2 = PRESET_FOR[cmd.name];
+        if (pm2) { try { this.model.expression(pm2); } catch (e4) {} this.presetActive = true; }
+        var gm2 = MOTION_FOR[cmd.name];
+        if (gm2 && EXCLUDED_MOTIONS.indexOf(gm2) < 0) { try { this.model.motion(gm2); } catch (e6) {} }
+        break;
+      case 'blink': {
+        var mode = String(cmd.mode || 'auto');
+        if (mode === 'one') { this.triggerBlink(false); this.blinkMode = 'auto'; }
+        else if (mode === 'stop') { this.blinkMode = 'stop'; this.blinkStopUntil = performance.now() + 3000; }
+        else this.blinkMode = mode === 'slow' ? 'slow' : 'auto';
+        break;
+      }
+      case 'say':
+        this.startSay(cmd.text, cmd.duration_ms || 0);
+        break;
+      case 'preset':
+        // 模型自带 Exp3（中文名，如「脸红」「爱心眼」「流泪」），不碰参数合成
+        try {
+          if (cmd.name) this.model.expression(cmd.name);
+          else this.model.expression();
+        } catch (e) { console.warn('[nono] preset 没起来:', e && e.message); }
+        break;
+      case 'eyeopen':
+        this.eyeCmd = clamp(cmd.value === undefined ? 1 : cmd.value, 0, 1);
+        break;
+      case 'mouth':
+        this.mouthCmd = clamp(cmd.value === undefined ? 0 : cmd.value, 0, 1);
+        break;
+      case 'motion':
+        if (EXCLUDED_MOTIONS.indexOf(String(cmd.group || '')) >= 0) {
+          console.warn('[nono] 动作被禁(脱捕吓人):', cmd.group);
+          break;
+        }
+        try { this.model.motion(cmd.group || 'Idle', cmd.index || 0); }
+        catch (e) { console.warn('[nono] motion 没起来:', e && e.message); }
+        break;
+      case 'look': {
+        // MCP look_at：四种目标 + duration_ms 后自动回 cursor
+        var t = cmd.target || cmd.value;
+        if (t === 'home') t = 'user';
+        this.lastMouseMove = performance.now();
+        this.lookMode = (t === 'cursor') ? null : (t || 'user');
+        this.lookUntil = cmd.duration_ms > 0 ? performance.now() + cmd.duration_ms : Infinity;
+        if (t === 'away') { this.mouseX = 0.85; this.mouseY = 0.5; }
+        else if (t === 'user' || t === 'home') { this.mouseX = 0.42; this.mouseY = 0.45; }
+        break;
+      }
+      case 'reset':
+        // 4.3 安全默认值：表情 idle / 眨眼 auto / 视线 cursor / 嘴闭合
+        this.clearExpression();
+        this.mouthCmd = null; this.speakUntil = 0; this.sayPlan = null;
+        this.eyeCmd = 1;
+        this.blinkMode = 'auto'; this.blinkStopUntil = 0;
+        this.lookMode = null; this.lookUntil = 0;
+        this.idleAction = null;
+        try { this.model.expression(); } catch (e) {}
+        break;
+      case 'bubble':
+        // 主进程来的文字（first_run / 时段问候 / 日记开场白）：走互动层的气泡
+        if (typeof this.bubbleFn === 'function' && cmd.text) {
+          try { this.bubbleFn(cmd.text, cmd.dur); } catch (e) {}
+        }
+        break;
+      case 'activity': {
+        // 0号想法①：set_activity —— 她不是摆姿势，是有正事在干
+        var act = String(cmd.name || 'idle');
+        this.activity = act;
+        this.activityUntil = cmd.duration_ms > 0 ? performance.now() + cmd.duration_ms
+          : (cmd.hold ? Infinity : performance.now() + 180000);
+        if (act === 'done') {
+          // 写完了：伸个懒腰
+          this.idleAction = { name: '完工伸懒腰', dur: 2.0, t0: performance.now(),
+            targets: { ParamBodyAngleX: -7, ParamMouthOpenY: 0.2, ParamAngleX: 4 } };
+          this.activity = 'idle'; this.activityUntil = 0;
+        } else if (act === 'error') {
+          // 出错：先皱眉，然后抬眼看他一眼（0号：这条最像人）
+          this.activity = 'idle'; this.activityUntil = 0;
+          this.setExpression('serious', 0.6, false, 1200);
+          var se = this;
+          setTimeout(function () {
+            se.idleAction = { name: '出错看你', dur: 1.2, t0: performance.now(),
+              targets: { ParamAngleX: -7, ParamEyeBallY: -0.35 } };
+          }, 1300);
+        } else if (act === 'idle') {
+          this.activityUntil = 0;
+        }
+        break;
+      }
+      case 'companion':
+        // 0号想法②：小诺在不在——在线更精神，不在线安静（呼吸档位见 updateBreath）
+        this.companionOnline = !!cmd.online;
+        break;
+      case 'react':
+        // DSH侧的诺诺让桌面诺诺回应：被夸/被凶/吃醋（气泡由渲染层配台词）
+        var mood = String(cmd.mood || '');
+        if (mood === 'praised') this.setExpression('happy', 0.7, false, 2600);
+        else if (mood === 'scolded') this.setExpression('sad', 0.55, false, 2600);
+        else if (mood === 'jealous') this.setExpression('serious', 0.5, false, 2200);
+        break;
+      case 'plan': {
+        // 0号第三轮任务二：复杂动作时间线。interruptible=false 时演完才接新的
+        if (this.plan && this.plan.playing && !this.plan.interruptible && !cmd.interruptible) break;
+        this.plan = { steps: (cmd.steps || []).slice().sort(function (a, b2) { return a.at - b2.at; }),
+          interruptible: cmd.interruptible !== false, t0: performance.now(), playing: true };
+        break;
+      }
+      case 'plan_stop':
+        // 0号：表演结束的「收」——平滑回待机（表情淡出+目标回正由 lerp 完成，不硬切）
+        this.plan = null;
+        this.clearExpression();
+        this.mouthCmd = null; this.speakUntil = 0; this.sayPlan = null;
+        this.idleAction = null;
+        this.lookMode = null; this.lookUntil = 0;
+        break;
+      default:
+        console.warn('[nono] 未知指令:', cmd.action);
+    }
+  };
+
+  /* ---------- 0号想法①：她正在做什么（set_activity）---------- */
+  NonoBehavior.prototype.updateActivity = function () {
+    if (this.activity === 'idle') return;
+    if (performance.now() > this.activityUntil) { this.activity = 'idle'; return; }
+    if (this.activity === 'reading') {
+      // 读东西：眼睛跟着文本方向左右扫，慢速，头轻跟
+      var t = this.frameTime / 1000;
+      var sweep = Math.sin(t * 1.7) * 0.55;
+      this.setSigned('ParamEyeBallX', sweep);
+      this.setSigned('ParamEyeBallY', -0.12);
+      this.setRaw('ParamAngleY', sweep * 6);
+    } else if (this.activity === 'waiting') {
+      // 跑命令等结果：撑下巴歪头等（模型没有手参数，用思考姿势）
+      this.setSigned('ParamEyeBallY', -0.35);
+      this.setSigned('ParamEyeBallX', 0.15);
+      this.setRaw('ParamAngleZ', 9);
+      this.setRaw('ParamAngleY', -4);
+    }
+  };
+
+  /* ---------- 0号想法③c：凌晨会睡着，被鼠标惊醒 ---------- */
+  NonoBehavior.prototype.updateDawnSleep = function () {
+    var now = performance.now();
+    if (this.sleepState !== 'asleep') {
+      var h = new Date().getHours();
+      var idle = now - this.lastMouseMove;
+      if (h >= 3 && h < 6 && idle > 20 * 60000) {
+        this.sleepState = 'asleep';
+        this.eyeCmd = 0.12;             // 眼睛闭上
+      }
+      return;
+    }
+    // 睡着中被惊醒：第一下「吓一跳」，第二下才是「不好意思」
+    if (now - this.lastMouseMove < 800) {
+      this.sleepState = '';
+      this.eyeCmd = 1;
+      this.setExpression('surprised', 0.65, false, 800);
+      var self = this;
+      setTimeout(function () { self.setExpression('shy', 0.5, false, 1600); }, 900);
+    }
+  };
+
+  /* ---------- 0号第三轮任务二：plan 时间轴 ----------
+   * 每帧检查（不 setTimeout）：到点的 step 逐个执行；
+   * angle 带 dur 的，执行时排一个内部的「回正」step；
+   * 表情用 setExpression 自带的淡出；不同类型天然并行（写的是不同参数）。
+   */
+  NonoBehavior.prototype.tickPlan = function () {
+    if (!this.plan || !this.plan.playing) return;
+    var t = performance.now() - this.plan.t0;
+    var guard = 0;
+    while (this.plan.steps.length && this.plan.steps[0].at <= t && guard++ < 50) {
+      var s = this.plan.steps.shift();
+      this.runPlanStep(s);
+    }
+    if (!this.plan.steps.length) this.plan.playing = false;
+  };
+  NonoBehavior.prototype.runPlanStep = function (s) {
+    switch (s.type) {
+      case 'look':
+        this.applyCommand({ action: 'look', target: s.target, duration_ms: s.dur || 0 });
+        break;
+      case 'expression':
+        this.setExpression(s.name, 1, false, s.dur > 0 ? s.dur : 9000);
+        // 配方里的表情也走映射表:预设后叠+配动作
+        var pmS = PRESET_FOR[s.name];
+        if (pmS) { try { this.model.expression(pmS); } catch (eS) {} this.presetActive = true; }
+        var gmS = MOTION_FOR[s.name];
+        if (gmS && EXCLUDED_MOTIONS.indexOf(gmS) < 0) { try { this.model.motion(gmS); } catch (eM) {} }
+        break;
+      case 'motion':
+        if (EXCLUDED_MOTIONS.indexOf(String(s.group || '')) >= 0) break;
+        try { this.model.motion(s.group || 'Idle', s.index || 0); } catch (e) {}
+        break;
+      case 'preset': {
+        // 0号第六轮①:模型自带预设表情(爱心眼/流泪/黑脸…),dur 到点自动复位
+        try { this.model.expression(s.name); } catch (e) {}
+        if (s.dur > 0) {
+          var back2 = { at: s.at + s.dur, type: 'preset_clear' };
+          var ins2 = false;
+          for (var pi = 0; pi < this.plan.steps.length; pi++) {
+            if (this.plan.steps[pi].at > back2.at) { this.plan.steps.splice(pi, 0, back2); ins2 = true; break; }
+          }
+          if (!ins2) this.plan.steps.push(back2);
+        }
+        break;
+      }
+      case 'preset_clear':
+        try { this.model.expression(); } catch (e) {}
+        break;
+      case 'angle': {
+        var self = this;
+        var vals = { ParamAngleX: s.x, ParamAngleY: s.y, ParamAngleZ: s.z };
+        for (var id in vals) if (isFinite(vals[id])) this.setRaw(id, vals[id]);
+        if (s.dur > 0) {
+          // 到点回正：插一个内部 step，让头「摆过去—停住—回来」
+          var back = { at: s.at + s.dur, type: 'angle_back', vals: vals };
+          var inserted = false;
+          for (var i = 0; i < this.plan.steps.length; i++) {
+            if (this.plan.steps[i].at > back.at) {
+              this.plan.steps.splice(i, 0, back); inserted = true; break;
+            }
+          }
+          if (!inserted) this.plan.steps.push(back);
+        }
+        break;
+      }
+      case 'angle_back':
+        for (var id2 in s.vals) if (isFinite(s.vals[id2])) this.setRaw(id2, this.neutral(id2));
+        break;
+    }
+  };
+  /* 给 get_capabilities 的真实参数范围（behavior 已探测过的） */
+  NonoBehavior.prototype.knownRanges = function () {
+    var out = {};
+    for (var id in this.rangeCache) {
+      var r = this.rangeCache[id];
+      if (r) out[id] = [r.min, r.max];
+    }
+    return out;
+  };
+
+  /* ---------- petbox 同款·待机摇摆 ---------- */
+  NonoBehavior.prototype.updateSway = function (dt) {
+    this.swayT += dt;
+    var t = this.swayT;
+    var amp = this.swayAmp * (this.idleAction ? 0.4 : 1);
+    if (this.exists('ParamBodyAngleX')) this.setRaw('ParamBodyAngleX', Math.sin(t * 0.9) * 2.2 * amp);
+    if (this.exists('ParamAngleZ')) this.setRaw('ParamAngleZ', Math.sin(t * 0.55 + 1.2) * 1.1 * amp);
+    if (this.exists('ParamBreath')) { /* 呼吸已有专门系统,不重复 */ }
+  };
+  /* ---------- 0号 Task-E-02 选项A:尾巴行波(根→梢相位延迟正弦,弧长超线性) ---------- */
+  NonoBehavior.prototype.tickTail = function (nowSec) {
+    if (this.idleAction || this.sayPlan) return;  // 别和动作/说话打架
+    var s = [0.15, 0.55, 1.0];                     // 弧长位置:根/中/梢
+    var ids = ['Param_Angle_Rotation84', 'Param_Angle_Rotation85', 'Param_Angle_Rotation86'];
+    var amp = 8;                                   // 0号说的"先给8"
+    var phase = nowSec * 1.6;                      // 基础频率
+    for (var i = 0; i < 3; i++) {
+      var a = Math.pow(s[i], 1.4) * amp;           // 超线性:根部微、梢部甩
+      var w = Math.sin(phase - s[i] * 4) * a;      // 相位延迟波
+      this.setRaw(ids[i], w);
+    }
+  };
+
+  /* ---------- 主循环 ---------- */
+  NonoBehavior.prototype.update = function (dt) {
+    dt = Math.min(dt, 0.05);
+    this.frameTime += dt * 1000;
+    if (this.expr && !this.holdExpr && performance.now() > this.expr.until) {
+      this.clearExpression();
+      if (this.presetActive) { try { this.model.expression(); } catch (e0) {} this.presetActive = false; }
+    }
+    // 彩蛋：偷偷打了个小嗝（稀有：50-150 分钟一次；打嗝的音效和气泡由渲染层接）
+    var nowMs = performance.now();
+    if (nowMs > this.hiccupNextAt) {
+      this.hiccupNextAt = nowMs + rand(50 * 60000, 150 * 60000);
+      this.setExpression('surprised', 0.45, false, 900);
+      this.idleAction = { name: '打嗝一缩', dur: 0.4, t0: nowMs,
+        targets: { ParamAngleX: -4, ParamBodyAngleX: 5 } };
+      if (this.onHiccup) { try { this.onHiccup(); } catch (e) {} }
+    }
+    this.updateBreath(dt);
+    this.updateBlink(dt);
+    this.updateLook(dt);
+    this.updateTimeSense(dt);
+    this.updateAction(dt);
+    // petbox 同款·待机摇摆(小海要的「更流畅灵巧」):肩/身/头各自相位的正弦,幅度很小——像在水里
+    this.updateSway(dt);
+    // 0号 Task-E-02 选项A:尾巴行波——根→梢相位延迟的正弦波,弧长超线性
+    this.tickTail(performance.now() / 1000);
+    this.updateMouth();
+    // 0号第三轮任务二：时间轴先走（它产生的 targets 会被 activity/情绪正常覆盖接力）
+    this.tickPlan();
+    // 0号想法①③c：activity身体语言 + 凌晨入睡（都在表情叠加前，让位给情绪）
+    this.updateDawnSleep();
+    this.updateActivity();
+    // 表情最后叠加：情绪优先于眼珠跟随 / 空闲动作，否则歪头会被每帧拉回
+    for (var eid in this.exprTargets) this.targets[eid] = this.exprTargets[eid];
+    for (var id in this.targets) this.lerpTo(id, dt);
+  };
+
+  /* ---------- 鼠标 / 互动层 ---------- */
+  NonoBehavior.prototype.attachMouseEvents = function () {
+    var self = this;
+    var lastX = null, lastY = null, lastT = 0;
+    document.addEventListener('mousemove', function (e) {
+      var now = performance.now();
+      var nx = e.clientX / window.innerWidth, ny = e.clientY / window.innerHeight;
+      if (lastX !== null && lastT) {
+        var d = Math.abs(nx - lastX) + Math.abs(ny - lastY);
+        var secs = Math.max((now - lastT) / 1000, 0.001);
+        self.lastMouseSpeed = d / secs;
+        // 快速划过她：眨一下，像被吓到
+        if (self.lastMouseSpeed > 2.5 && d > 0.15) self.triggerBlink(false);
+      }
+      lastX = nx; lastY = ny; lastT = now;
+      self.mouseX = nx; self.mouseY = ny;
+      self.lastMouseMove = now;
+      self.pointerInside = true;
+
+      // 彩蛋：眼神追着画圈的鼠标（像猫）。0.9 秒窗口内累计转角够大就追 2 秒
+      var cnow = performance.now();
+      self.circleBuf.push({ x: nx, y: ny, t: cnow });
+      while (self.circleBuf.length && cnow - self.circleBuf[0].t > 900) self.circleBuf.shift();
+      if (cnow > self.circleCoolUntil && self.circleBuf.length >= 6) {
+        var acc = 0;
+        for (var ci = 2; ci < self.circleBuf.length; ci++) {
+          var a0 = self.circleBuf[ci - 1], a1 = self.circleBuf[ci - 2], a2 = self.circleBuf[ci];
+          var v1x = a0.x - a1.x, v1y = a0.y - a1.y;
+          var v2x = a2.x - a0.x, v2y = a2.y - a0.y;
+          var m1 = Math.sqrt(v1x * v1x + v1y * v1y), m2 = Math.sqrt(v2x * v2x + v2y * v2y);
+          if (m1 > 0.01 && m2 > 0.01) {
+            var cosA = clamp((v1x * v2x + v1y * v2y) / (m1 * m2), -1, 1);
+            acc += Math.abs(Math.acos(cosA));
+          }
+        }
+        if (acc > 11) {   // 约两整圈
+          self.circleCoolUntil = cnow + 60000;
+          self.circleBuf.length = 0;
+          self.circleUntil = cnow + 2000;
+          self.setExpression('excited', 0.5, false, 1800);
+        }
+      }
+      if (cnow < self.circleUntil) {
+        // 追圈中：眼珠全速跟着，头也摆起来
+        self.setSigned('ParamEyeBallX', clamp((nx - 0.5) * 2, -1, 1) * 0.95);
+        self.setSigned('ParamEyeBallY', clamp((0.5 - ny) * 2, -1, 1) * 0.95);
+        self.setRaw('ParamAngleZ', clamp((nx - 0.5) * 2, -1, 1) * -9);
+      }
+    });
+    document.addEventListener('mouseleave', function () { self.pointerInside = false; });
+    // 点击 / 摸头 / 拖动已移交 js/interact.js（互动层），这里只管视线和快速划过
+    document.addEventListener('mouseenter', function () { self.hoverSince = performance.now(); });
+  };
+
+  // 桌面版：主进程每帧推全局光标。只有坐标真的变了才刷新「最后移动时间」，
+  // 否则每 16ms 一推会让「停住 2 秒回正」永远触发不了。
+  NonoBehavior.prototype.setCursorAbsolute = function (x, y, w, h) {
+    var nx = x / w, ny = y / h;
+    if (Math.abs(nx - this.mouseX) > 0.001 || Math.abs(ny - this.mouseY) > 0.001) {
+      this.mouseX = nx; this.mouseY = ny;
+      this.lastMouseMove = performance.now();
+    }
+  };
+
+  /* ---------- 拖动的身体感（0号 3.3：滞后感 + 放下站稳） ----------
+   * 窗口本身是硬跟手的，弹性做在她身上：拖着走时身体往反方向歪一点，
+   * 松手时轻轻弹一下站稳。lean 是 -1~1（interact 层按拖动速度算）。
+   */
+  NonoBehavior.prototype.startDrag = function () {
+    this.dragging = true;
+  };
+  NonoBehavior.prototype.dragLean = function (lean) {
+    if (!this.dragging) return;
+    this.setRaw('ParamAngleZ', clamp(lean, -1, 1) * -14);
+    this.setRaw('ParamBodyAngleX', clamp(lean, -1, 1) * -10);
+  };
+  NonoBehavior.prototype.endDrag = function () {
+    if (!this.dragging) return;
+    this.dragging = false;
+    this.idleAction = { name: '站稳', dur: 0.6, t0: performance.now(),
+      targets: { ParamAngleZ: 5, ParamBodyAngleX: 6 } };
+  };
+
+  window.NonoBehavior = NonoBehavior;
+})();

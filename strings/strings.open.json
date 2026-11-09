@@ -1,0 +1,118 @@
+{
+  "_说明": "Open-source strings. Neutral wording only. No personal names.",
+  "_注意": "Every personal name replaced with a neutral term.",
+
+  "meta": {
+    "name": "Whale Desktop",
+    "short": "Whale",
+    "nickname": "",
+    "version": "0.1",
+    "flavor": "open"
+  },
+
+  "window": {
+    "title": "Whale Desktop"
+  },
+
+  "loading": {
+    "main": "Loading model…",
+    "slow": "Still loading, one moment…",
+    "very_slow": "Taking longer than usual…",
+    "done": ""
+  },
+
+  "error": {
+    "model_missing": "No model found.\nPlease put a Live2D model into the models/ directory.",
+    "model_broken": "Failed to load the model. The files may be incomplete.",
+    "model_version": "Model format mismatch (moc3 version unsupported).",
+    "renderer_crash": "Renderer crashed. Restarting…",
+    "mcp_lost": "MCP connection lost.",
+    "unknown": "Something went wrong."
+  },
+
+  "quit": {
+    "title": "Quit Whale Desktop?",
+    "message": "",
+    "confirm": "Quit",
+    "cancel": "Cancel"
+  },
+
+  "menu": {
+    "recenter": "Center window",
+    "settings": "Settings",
+    "about": "About",
+    "toggle_click": "Enable click-through",
+    "toggle_ignore": "Disable click-through",
+    "sfx": "Sound effects",
+    "pat": "Pat her",
+    "say": "Say something",
+    "expr": "Expressions",
+    "appearance": "Appearance",
+    "size": "Window size",
+    "size_small": "Small",
+    "size_mid": "Medium",
+    "size_big": "Large",
+    "always_top": "Always on top",
+    "recipes": "Recipe moves",
+    "quit": "Quit"
+  },
+
+  "tray": {
+    "tooltip": "Whale Desktop",
+    "tooltip_waiting": "Whale Desktop",
+    "say": "Say something",
+    "settings": "Settings",
+    "quit": "Quit"
+  },
+
+  "about": {
+    "title": "Whale Desktop",
+    "body": "A Live2D desktop companion shell.\n\nThis is the body, not the soul.\nBring your own model, strings, and personality.\n\nLicensed under MIT.",
+    "birthday_extra": ""
+  },
+
+  "first_run": "Whale Desktop is running.\n\nDrop a Live2D model into models/ to get started.",
+
+  "time_greeting": {
+    "dawn": "",
+    "morning": "",
+    "noon": "",
+    "evening": "",
+    "night": ""
+  },
+
+  "boot": {
+    "late_night": ""
+  },
+
+  "notify": {
+    "long_idle": "",
+    "returned": "",
+    "mcp_connected": "MCP connected",
+    "mcp_disconnected": "MCP disconnected"
+  },
+
+  "bubble": {
+    "on_click_head": "",
+    "on_click_body": "",
+    "on_click_tail": "",
+    "on_click_repeat": "",
+    "on_hover_back": ""
+  },
+
+  "interact": {
+    "patMid": ["Mmh…", "Nn…", "Hmph…"],
+    "patDone": ["Hehe…", "That feels nice…", "One more…"],
+    "patMax": "…I like you the most",
+    "patCount": "That's {n} pats already…",
+    "pokeHead": ["Huh?", "Hey", "Don't poke"],
+    "pokeBody": ["Eep!", "Hey!", "Wawah"],
+    "pokeLegs": "Wawah!",
+    "pokeTail": "N-not the tail!",
+    "annoyed": "Geez!",
+    "dragDrop": "Steady~",
+    "hiccup": "Hic—"
+  },
+
+  "bubble_pool": {}
+}

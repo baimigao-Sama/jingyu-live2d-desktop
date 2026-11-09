@@ -1,0 +1,21 @@
+{
+  "name": "被发现偷看",
+  "when": "偷看被抓包、他忽然看过来",
+  "steps": [
+    {
+      "at": 0,
+      "type": "trajectory",
+      "duration": 3.0,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 0.3, "values": { "AngleX": 16, "AngleY": -4, "AngleZ": -6, "PositionX": 12, "LeanInput": -5 } },
+        { "time": 1.0, "values": { "AngleX": 16, "AngleY": -4, "AngleZ": -6, "PositionX": 12, "LeanInput": -5 } },
+        { "time": 1.9, "values": { "AngleX": -6, "AngleY": 2, "AngleZ": 4, "PositionX": -4, "LeanInput": -4 } },
+        { "time": 2.9, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    },
+    { "at": 0, "type": "expression", "name": "surprised", "dur": 900 },
+    { "at": 800, "type": "expression", "name": "shy", "dur": 2200 },
+    { "at": 800, "type": "preset", "name": "脸红", "dur": 2200 }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "name": "被夸了",
+  "when": "他说好听的话",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "happy", "dur": 2200 },
+    { "at": 150, "type": "preset", "name": "爱心眼", "dur": 2200 },
+    { "at": 200, "type": "angle", "x": 8, "y": -3, "z": 0, "dur": 1000 },
+    { "at": 1800, "type": "look", "target": "user", "dur": 1200 }
+  ]
+}

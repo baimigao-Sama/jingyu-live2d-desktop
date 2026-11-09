@@ -1,0 +1,19 @@
+{
+  "name": "左顾右盼",
+  "when": "待机久了、想找他",
+  "steps": [
+    {
+      "at": 0,
+      "type": "trajectory",
+      "duration": 6.6,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -4 } },
+        { "time": 1.2, "values": { "AngleX": 22, "AngleY": 2, "AngleZ": -7, "PositionX": 10, "LeanInput": -7 } },
+        { "time": 2.6, "values": { "AngleX": 22, "AngleY": 2, "AngleZ": -7, "PositionX": 10, "LeanInput": -7 } },
+        { "time": 3.8, "values": { "AngleX": -20, "AngleY": -4, "AngleZ": 8, "PositionX": -9, "LeanInput": -9 } },
+        { "time": 5.2, "values": { "AngleX": -20, "AngleY": -4, "AngleZ": 8, "PositionX": -9, "LeanInput": -9 } },
+        { "time": 6.4, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    }
+  ]
+}

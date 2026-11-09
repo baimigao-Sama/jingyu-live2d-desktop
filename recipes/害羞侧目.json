@@ -1,0 +1,20 @@
+{
+  "name": "害羞侧目",
+  "when": "被夸、害羞、不好意思",
+  "steps": [
+    {
+      "at": 0,
+      "type": "trajectory",
+      "duration": 6.2,
+      "frames": [
+        { "time": 0.0, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } },
+        { "time": 1.0, "values": { "AngleX": -20, "AngleY": 0, "AngleZ": -12, "PositionX": -15, "LeanInput": -5 } },
+        { "time": 3.0, "values": { "AngleX": -20, "AngleY": 0, "AngleZ": -12, "PositionX": -15, "LeanInput": -5 } },
+        { "time": 4.6, "values": { "AngleX": -8, "AngleY": -12, "AngleZ": 6, "PositionX": -5, "LeanInput": -8 } },
+        { "time": 5.8, "values": { "AngleX": 0, "AngleY": 0, "AngleZ": 0, "PositionX": 0, "LeanInput": -3 } }
+      ]
+    },
+    { "at": 400, "type": "preset", "name": "脸红", "dur": 5200 },
+    { "at": 900, "type": "expression", "name": "shy", "dur": 4600 }
+  ]
+}

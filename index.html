@@ -1,0 +1,204 @@
+﻿<!DOCTYPE html>
+<!--
+  鲸诺海 · 桌面 Live2D 形象（nono-live2d-desktop）
+  Copyright (c) 2026 白米糕-Sama / 鲸诺海。保留所有权利。
+
+  授权：PolyForm Noncommercial License 1.0.0（开源发行版）
+    允许：非商业使用、修改、分发（分发须带上本许可与 Required Notice）
+    禁止：任何商业用途
+  模型素材版权归原作者（神宫凉子 / 霓虹猫_NeonNeko），不在本许可内。
+  完整条款见 LICENSE.txt；作者自用版见 LICENSE-作者自用版.txt。
+-->
+
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>鲸诺海 · 桌面形象</title>
+<style>
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden;
+    font-family: "Microsoft YaHei", sans-serif;
+  }
+  /* 网页版：浅海背景 —— 上面透光、往下变深，她是深海来的 */
+  #ocean {
+    position: fixed; inset: 0; z-index: 0; overflow: hidden;
+    background: linear-gradient(180deg, #cfeaf9 0%, #9fd2f0 30%, #62a9de 62%, #3a7bc0 100%);
+  }
+  #ocean .ray {
+    position: absolute; top: -10%; height: 130%; width: 90px;
+    background: linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0) 75%);
+    transform: skewX(-14deg); filter: blur(6px);
+    animation: raysway 11s ease-in-out infinite alternate;
+  }
+  #ocean .ray:nth-child(1) { left: 12%; animation-delay: 0s; }
+  #ocean .ray:nth-child(2) { left: 38%; width: 56px; opacity: .7; animation-delay: -4s; }
+  #ocean .ray:nth-child(3) { left: 66%; width: 120px; opacity: .5; animation-delay: -7s; }
+  @keyframes raysway { from { transform: skewX(-14deg) translateX(0); } to { transform: skewX(-11deg) translateX(26px); } }
+  #ocean .bubbleup {
+    position: absolute; bottom: -30px; border-radius: 50%;
+    background: radial-gradient(circle at 32% 30%, rgba(255,255,255,.9), rgba(255,255,255,.12) 62%);
+    border: 1px solid rgba(255,255,255,.35);
+    animation: rise linear forwards;
+    pointer-events: none;
+  }
+  @keyframes rise {
+    from { transform: translateY(0); opacity: .0; }
+    12%  { opacity: .55; }
+    to   { transform: translateY(-108vh); opacity: 0; }
+  }
+  /* 网页版她脚下一点淡淡的影 */
+  #shadow {
+    position: fixed; z-index: 1; left: 50%; bottom: 5%;
+    width: 300px; height: 56px; transform: translateX(-50%);
+    background: radial-gradient(ellipse at center, rgba(18,44,84,.30), rgba(18,44,84,0) 68%);
+    pointer-events: none;
+  }
+  body.desktop { background: transparent !important; }
+  body.desktop #ocean, body.desktop #shadow { display: none !important; }
+  body.desktop #status, body.desktop #wsstate, body.desktop #credit { display: none; }
+  #stage { position: fixed; inset: 0; z-index: 2; }
+  canvas { display: block; }
+  .hud {
+    position: fixed; z-index: 10; font-size: 12px; color: #2c4a6e;
+    background: rgba(255,255,255,.68); padding: 4px 10px; border-radius: 12px;
+  }
+  #status { top: 10px; left: 12px; }
+  #wsstate { top: 10px; right: 12px; }
+  #credit { bottom: 8px; right: 12px; font-size: 11px; color: rgba(255,255,255,.75); text-shadow: 0 1px 3px rgba(30,60,100,.35); }
+
+  /* 互动特效层：小心心从这里冒 */
+  #fx { position: fixed; inset: 0; z-index: 8; pointer-events: none; }
+  .heart {
+    position: absolute; width: 14px; height: 14px;
+    transform: rotate(45deg);
+    background: #ff7fa5;
+    animation: heartfloat 1.35s ease-out forwards;
+  }
+  .heart::before, .heart::after {
+    content: ""; position: absolute; width: 14px; height: 14px;
+    border-radius: 50%; background: #ff7fa5;
+  }
+  .heart::before { left: -7px; top: 0; }
+  .heart::after  { left: 0; top: -7px; }
+  .heart.big { width: 20px; height: 20px; background: #ff5d8f; }
+  .heart.big::before, .heart.big::after { width: 20px; height: 20px; background: #ff5d8f; }
+  .heart.big::before { left: -10px; }
+  .heart.big::after  { top: -10px; }
+  @keyframes heartfloat {
+    from { opacity: .95; transform: rotate(45deg) translateY(0) scale(.7); }
+    to   { opacity: 0;   transform: rotate(45deg) translateY(-90px) scale(1.15); }
+  }
+
+  /* 气泡：她的小声嘀咕 */
+  #bubble {
+    position: fixed; z-index: 9; max-width: 220px;
+    transform: translate(-50%, -100%);
+    background: rgba(255,255,255,.94); color: #3a567a;
+    font-size: 13px; line-height: 1.5; padding: 7px 13px;
+    border-radius: 14px; border-bottom-left-radius: 4px;
+    box-shadow: 0 3px 14px rgba(30,60,100,.22);
+    opacity: 0; transition: opacity .22s ease;
+    pointer-events: none; white-space: nowrap;
+  }
+  #bubble.show { opacity: 1; }
+  /* petbox 同款·浮动气泡(可多颗,上飘+淡出) + 回复卡 */
+  .bubble-f {
+    position: fixed; z-index: 9; max-width: 230px; white-space: pre-wrap;
+    background: rgba(255,255,255,.95); color: #3a567a;
+    font-size: 13px; line-height: 1.6; padding: 8px 14px;
+    border-radius: 14px; border-bottom-left-radius: 4px;
+    box-shadow: 0 4px 18px rgba(30,60,100,.25);
+    animation: bfloat 2.6s ease-out forwards;
+  }
+  @keyframes bfloat {
+    0% { opacity: 0; transform: translateY(10px) scale(.92); }
+    12% { opacity: 1; transform: translateY(0) scale(1); }
+    78% { opacity: 1; transform: translateY(-6px); }
+    100% { opacity: 0; transform: translateY(-16px); }
+  }
+  /* 0号督办任务1·阶段气泡:上半身小圆泡(js/bubbles.js spawn/tick) */
+  .stage-bubble {
+    position: absolute; max-width: 180px; white-space: nowrap;
+    background: rgba(255,255,255,.92); color: #3a567a;
+    font-size: 12px; line-height: 1.5; padding: 4px 10px;
+    border-radius: 12px; border-bottom-left-radius: 3px;
+    box-shadow: 0 3px 12px rgba(30,60,100,.2);
+    transform: translate(-50%, -50%);
+  }
+  .bubble-f .rbtn { display: inline-block; margin-top: 4px; background: #2C5F8A; color: #fff;
+    border: 0; border-radius: 10px; padding: 2px 9px; font-size: 11px; cursor: pointer; }
+  #reply-card { position: fixed; z-index: 11; display: none; left: 50%; bottom: 26px; transform: translateX(-50%); background: rgba(16,30,50,.96);
+    border: 1px solid #24466B; border-radius: 12px; padding: 10px;
+    box-shadow: 0 6px 24px rgba(0,0,0,.45) }
+  #reply-card input { width: 230px; border-radius: 8px; border: 0; padding: 6px 9px; font-size: 13px }
+  #reply-card .send { background: #2C5F8A; color: #fff; border: 0; border-radius: 8px;
+    padding: 5px 12px; margin-left: 6px; cursor: pointer }
+</style>
+</head>
+<body>
+  <div id="ocean"><div class="ray"></div><div class="ray"></div><div class="ray"></div></div>
+  <div id="shadow"></div>
+  <div id="stage"></div>
+  <div id="fx"></div>
+  <div id="bubble"></div>
+  <div id="stage-bubble-layer" style="position:absolute;inset:0;pointer-events:none;z-index:8;overflow:hidden;"></div>
+  <div id="reply-card"><input id="reply-input" placeholder="回给她…"><button class="send" id="reply-send">发送</button></div>
+  <div id="status" class="hud">加载中…</div>
+  <div id="wsstate" class="hud">控制：未连接</div>
+  <div id="credit">全名：鲸诺海 ｜ 主人：小海 ｜ 施工：3号+5号 ｜ 模型：神宫凉子 / 霓虹猫_NeonNeko</div>
+
+<script>
+/* 错误只往状态栏写，桌面模式下状态栏隐藏，同时打进 console 供主进程收集 */
+(function () {
+  var desktop = location.search.indexOf('desktop=1') >= 0 || !!window.NonoDesktop;
+  if (desktop) document.body.className = 'desktop';
+  window.NONO_DESKTOP = desktop;
+  window.__errs = [];
+  function note(s) {
+    window.__errs.push(s);
+    if (window.NonoDesktop && window.NonoDesktop.reportError) window.NonoDesktop.reportError(s);
+    var el = document.getElementById('wsstate');
+    if (el && !desktop) el.textContent = 'ERR: ' + String(s).slice(0, 60);
+  }
+  window.addEventListener('error', function (e) {
+    note((e.message || '?') + '@' + String(e.filename || '').split('/').pop() + ':' + e.lineno);
+  });
+  window.addEventListener('unhandledrejection', function (e) {
+    note('REJ: ' + (e.reason && e.reason.message ? e.reason.message : e.reason));
+  });
+  window.NONO_NOTE = note;
+
+  /* 网页版海洋背景的上浮气泡：少少的、慢慢的，别吵 */
+  if (!desktop) {
+    var ocean = document.getElementById('ocean');
+    setInterval(function () {
+      if (document.hidden) return;
+      var b = document.createElement('div');
+      b.className = 'bubbleup';
+      var s = 5 + Math.random() * 13;
+      b.style.width = b.style.height = s + 'px';
+      b.style.left = (Math.random() * 96) + '%';
+      b.style.animationDuration = (7 + Math.random() * 7) + 's';
+      ocean.appendChild(b);
+      setTimeout(function () { if (b.parentNode) b.parentNode.removeChild(b); }, 15000);
+    }, 2600);
+  }
+})();
+</script>
+
+<!-- 顺序固定：pixi → Cubism4 Core → cubism4 单运行时库。
+     千万不要再引双运行时版，它会强找 Cubism2 runtime 并中断注册。 -->
+<script src="lib/pixi.min.js"></script>
+<script src="lib/live2dcubismcore.min.js"></script>
+<script src="lib/cubism4.min.js"></script>
+<script src="js/sfx.js"></script>
+<script src="js/voice.js"></script>
+<script src="js/bubbles.js"></script>
+<script src="js/mood.js"></script>
+<script src="js/behavior.js"></script>
+<script src="js/interact.js"></script>
+<script src="js/ws-control.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

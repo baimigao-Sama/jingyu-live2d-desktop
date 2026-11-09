@@ -1,0 +1,12 @@
+{
+  "name": "摸摸头",
+  "when": "他摸她",
+  "steps": [
+    { "at": 0, "type": "expression", "name": "happy", "dur": 2800 },
+    { "at": 150, "type": "preset", "name": "脸红", "dur": 2400 },
+    { "at": 250, "type": "angle", "x": -4, "y": -2, "z": 8, "dur": 900 },
+    { "at": 1000, "type": "angle", "x": 4, "y": -2, "z": -8, "dur": 900 },
+    { "at": 1800, "type": "angle", "x": 0, "y": -3, "z": 3, "dur": 900 },
+    { "at": 2300, "type": "look", "target": "user", "dur": 1400 }
+  ]
+}
