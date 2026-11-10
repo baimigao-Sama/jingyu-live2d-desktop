@@ -62,9 +62,15 @@ check('不活动降帧已接', fs.readFileSync(path.join(ROOT, 'js', 'main.js'),
 const EXPR_SEM = ['idle', 'happy', 'shy', 'sad', 'serious', 'sleepy', 'excited', 'surprised', 'thinking', 'angry', 'smile', 'typing'];
 const recDir = path.join(ROOT, 'recipes');
 const recFiles = fs.existsSync(recDir) ? fs.readdirSync(recDir).filter(f => f.endsWith('.json')) : [];
-const zProd = 'G:\\诺诺永远存在\\Z\\Z-GLM5.3\\项目\\03-桌宠动作库\\产出';
-const prodJsons = fs.existsSync(zProd) ? fs.readdirSync(zProd).filter(f => f.endsWith('.json') && f !== 'index.md') : [];
-check('配方: 桌宠包与库产出数量一致', recFiles.length === prodJsons.length && recFiles.length >= 10, recFiles.length + ' vs ' + prodJsons.length);
+// 配方库产出目录：只有本机存在时才对账；开源环境没有这个目录，直接跳过（记 0）
+const zProd = process.env.NONO_RECIPE_LIB || '';
+const prodJsons = zProd && fs.existsSync(zProd)
+  ? fs.readdirSync(zProd).filter(f => f.endsWith('.json') && f !== 'index.md') : [];
+if (prodJsons.length) {
+  check('配方: 桌宠包与库产出数量一致', recFiles.length === prodJsons.length && recFiles.length >= 10, recFiles.length + ' vs ' + prodJsons.length);
+} else {
+  check('配方: 数量 ≥10（未接动作库，跳过对账）', recFiles.length >= 10, String(recFiles.length));
+}
 const recipeBad = [];
 for (const f of recFiles) {
   try {

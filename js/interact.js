@@ -141,7 +141,8 @@
         inp.value = '';
         var special = self.specialReply(v);
         self.bubble('小海：' + v, special ? 1800 : 3200);
-        // 0号督办任务2:先存成文件(G:\任务中枢\待领\说话\时间戳.txt),DSH 后面再接
+        // 老人督办意见：先落盘再由外部接（落盘目录由主进程 desktop/edition.js 决定，
+        // 开源版为空 = 不落盘）
         if (window.NonoDesktop && window.NonoDesktop.writeSpeak) window.NonoDesktop.writeSpeak(v);
         if (window.NonoDesktop && window.NonoDesktop.touchLog) window.NonoDesktop.touchLog({ kind: 'reply', text: v, special: special || '' });
         if (special) setTimeout(function () { self.performSpecial(special); }, 260);

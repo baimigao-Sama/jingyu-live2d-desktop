@@ -39,7 +39,7 @@ contextBridge.exposeInMainWorld('NonoDesktop', {
   pixelHit: function (hit) { ipcRenderer.send('nono-pixel-hit', hit); },
   // petbox 同款:点触记录(touch.jsonl,256KB 轮转)
   touchLog: function (entry) { ipcRenderer.send('nono-touch-log', entry); },
-  // 0号督办任务2:小海在桌宠里打的话→主进程写 G:\任务中枢\待领\说话\
+  // 主人在桌宠里打的话→交给主进程处理（落盘目录由主进程按版本决定）
   writeSpeak: function (text) { ipcRenderer.send('nono-write-speak', text); },
   // 回复卡开着时压过像素穿透,输入框点得到
   forceInteractive: function (v) { ipcRenderer.send('nono-force-interactive', v); },

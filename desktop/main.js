@@ -25,6 +25,7 @@ const { execFile, spawn } = require('child_process');
 const WebSocket = require('ws');
 const { createMcp } = require('./mcp-server');
 const loadStrings = require('./load-strings');
+const EDITION = require('./edition');   // 自用版 / 开源版开关（私有路径都从这里读）
 
 const S = loadStrings();
 const ROOT = path.resolve(__dirname, '..');
@@ -119,19 +120,23 @@ function saveConfig(c) {
 let cfg = loadConfig();
 let sfxOn = cfg.sfx !== false;   // 默认开
 let ttsOn = cfg.tts !== false;   // 任务3：说话出声，默认开
-if (cfg.peek === undefined) cfg.peek = true;   // 轻探针默认开（只读进程名/标题）
+// 轻探针：自用版默认开；开源版默认关（别人的机器，不主动读前台标题）
+if (cfg.peek === undefined) cfg.peek = !EDITION.openSource;
 
-/* ---------------- 任务3：真 TTS（用本机 ~/.dsh/tools/tts 那套 edge-tts） ----------------
- * 声音参数读 tools\tts\voice.json（小海自己挑的那个），换音色只改那个文件。
+/* ---------------- 任务3：真 TTS ----------------
+ * 语音合成目录由 edition.js 提供（自用版是本机私有 TTS，开源版为空 = 跳过）。
  * 同一个句子合成一次就缓存到 userData\tts\<hash>.mp3，不重复花时间。
  */
-const TTS_DIR = path.join(app.getPath('home'), '.dsh', 'tools', 'tts');
-const TTS_PY = path.join(TTS_DIR, 'venv', 'Scripts', 'python.exe');
-const TTS_VOICE = path.join(TTS_DIR, 'voice.json');
+const TTS_DIR = EDITION.ttsDir || '';
+const TTS_PY = TTS_DIR ? path.join(TTS_DIR, 'venv', 'Scripts', 'python.exe') : '';
+const TTS_VOICE = TTS_DIR ? path.join(TTS_DIR, 'voice.json') : '';
 const TTS_CACHE = path.join(USER_DATA, 'tts');
 const FEIYU_LOG = path.join(USER_DATA, 'feiyu-server.log');
 let feiyuProc = null;
 function ttsConfig() {
+  if (!TTS_VOICE) {
+    return { voice: 'zh-CN-XiaoxiaoNeural', rate: '-14%', pitch: '+25Hz', name: '默认', feiyu: null };
+  }
   try {
     const v = JSON.parse(fs.readFileSync(TTS_VOICE, 'utf8').replace(/^\uFEFF/, ''));
     return { voice: v.voice || 'zh-CN-XiaoxiaoNeural', rate: v.rate || '-14%',
@@ -149,7 +154,8 @@ function feiyuRun(text, fc) {
     text = String(text || '').trim().slice(0, 260);
     if (!text) return resolve({ ok: false, error: '空句子' });
     const style = fc.style || 'cute';
-    const cacheDir = fc.cache || 'D:\\feiyu\\cache';
+    // 缓存目录由配置给；没配就落到本程序的 userData，不再写死别人的盘符
+    const cacheDir = fc.cache || path.join(USER_DATA, 'feiyu-cache');
     const out = path.join(cacheDir, feiyuKey(style, text) + '.wav');
     const readBack = function (cached) {
       try {
@@ -200,7 +206,7 @@ function spawnFeiyu(fc, port) {
   try {
     const outFd = fs.openSync(FEIYU_LOG, 'a');
     feiyuProc = spawn(fc.python, [fc.server, '--port', String(port),
-      '--style', fc.style || 'cute', '--cache', fc.cache || 'D:\\feiyu\\cache'], {
+      '--style', fc.style || 'cute', '--cache', fc.cache || path.join(USER_DATA, 'feiyu-cache')], {
       windowsHide: true, detached: false,
       stdio: ['ignore', outFd, outFd],
       env: Object.assign({}, process.env, { PYTHONIOENCODING: 'utf-8' })
@@ -262,8 +268,10 @@ function pruneSelfchecks(dir) {
  * 隐私边界（0号定的）：只取最后一个非空行的第一句，不读全文，超60字截断。
  */
 function readDiaryTail() {
+  const diaryDir = EDITION.diaryDir || '';   // 开源版为空 = 不读日记
+  if (!diaryDir) return '';
   try {
-    const dir = path.join(app.getPath('home'), '.dsh', 'diary');
+    const dir = diaryDir;
     const files = fs.readdirSync(dir).filter(f => /^\d{4}-\d{2}-\d{2}.*\.md$/.test(f)).sort();
     if (!files.length) return '';
     const raw = fs.readFileSync(path.join(dir, files[files.length - 1]), 'utf8');
@@ -277,8 +285,10 @@ function readDiaryTail() {
   } catch (e) { return ''; }
 }
 
-/* 0号想法②：感知「小诺在不在」——进程表里有 dsh 相关进程就是在线 */
+/* 0号想法②：感知「小诺在不在」——进程表里有 dsh 相关进程就是在线。
+ * 开源版不做这项探测（不知道、也不猜用户机器上装了什么）。 */
 function dshOnline() {
+  if (EDITION.openSource) return null;
   try {
     const { execSync } = require('child_process');
     const out = execSync('tasklist /fo csv /nh', { encoding: 'utf8', timeout: 8000, windowsHide: true });
@@ -348,6 +358,21 @@ function startHttp(onReady) {
     const full = path.resolve(ROOT, '.' + rel);
     if (full !== ROOT && !full.startsWith(ROOT + path.sep)) {
       res.writeHead(403); res.end('forbidden'); return;
+    }
+    /* 安全（2026-11-10）：静态服务只出前端资源。
+     * 以前整个项目目录都能读，本机浏览器能拿到 desktop/（主进程源码）、
+     * node_modules/、package.json 甚至 tests/。现在白名单之外一律 404。 */
+    const allowTop = ['js', 'lib', 'models', 'strings', 'recipes', 'build'];
+    const relNorm = full.slice(ROOT.length + 1).split(path.sep);
+    const top = relNorm[0] || '';
+    const isEntry = relNorm.length === 1 && /^index\.html$/.test(top);
+    if (!isEntry && allowTop.indexOf(top) < 0) {
+      res.writeHead(404); res.end('not found'); return;
+    }
+    // 源码映射、日志、点触记录、包配置不通过静态服务暴露
+    const baseName = relNorm[relNorm.length - 1] || '';
+    if (/\.(map|log|jsonl)$/i.test(baseName) || /^package(-lock)?\.json$/i.test(baseName)) {
+      res.writeHead(404); res.end('not found'); return;
     }
     fs.readFile(full, function (err, data) {
       if (err) { res.writeHead(404); res.end('not found'); return; }
@@ -680,162 +705,268 @@ function moodLabelNow() {
     sad: '有点委屈', close: '亲近' }[m] || '平静';
 }
 
-function buildMenuTemplate() {
+/* ---------- 菜单模型（2026-11-10 重写） ----------
+ * 一份数据两处用：
+ *   · 托盘 → 系统原生菜单（Electron Menu 模板）
+ *   · 右键 → 自绘玻璃面板（menu-ui.html，可美化）
+ * 项格式：{ label, run(m), kind:'radio'|'check', on, submenu, disabled, sep, icon, badge }
+ */
+function buildMenuModel() {
   const exprNames = [['笑', 'happy'], ['害羞', 'shy'], ['困', 'sleepy'], ['惊讶', 'surprised'],
     ['气鼓鼓', 'angry'], ['难过', 'sad'], ['认真', 'serious'], ['想事情', 'thinking'],
     ['兴奋', 'excited'], ['微笑', 'smile']];
   const exprSub = exprNames.map(function (p) {
-    return { label: p[0], click: function () { sendToRenderer({ action: 'expression', name: p[1] }); } };
+    return { label: p[0], run: function () { sendToRenderer({ action: 'expression', name: p[1] }); } };
   });
   // 模型自带的 .exp3 预设（不是语义表情，直接叠图层）
   const presetNames = ['爱心眼', '圈圈眼', '流泪', '脸红', '黑脸', '黑框眼镜', '兔牙', '＞＜', '流冷汗', '屑屑眼'];
   const presetSub = presetNames.map(function (n) {
-    return { label: n, click: function () { sendToRenderer({ action: 'preset', name: n }); } };
+    return { label: n, run: function () { sendToRenderer({ action: 'preset', name: n }); } };
   }).concat([
-    { label: '眨左眼', click: function () { sendToRenderer({ action: 'wink', side: 'L' }); } },
-    { label: '眨右眼', click: function () { sendToRenderer({ action: 'wink', side: 'R' }); } },
-    { label: '吐舌头', click: function () { sendToRenderer({ action: 'tongue', ms: 1000 }); } }
+    { label: '眨左眼', run: function () { sendToRenderer({ action: 'wink', side: 'L' }); } },
+    { label: '眨右眼', run: function () { sendToRenderer({ action: 'wink', side: 'R' }); } },
+    { label: '吐舌头', run: function () { sendToRenderer({ action: 'tongue', ms: 1000 }); } }
   ]);
-  // 模型自带的动作组：2026-11-07 改成和「鞋子」一样的圆圈勾选，标签也用短名
+  // 模型自带的动作组：圆圈勾选，标签用短名
   const motionNames = ['默认手切举手', '举手切默认手', '狗尾草切换出来', '狗尾草切回默认手',
     '竖手指切出来动画', '竖手指切回默认', '脱捕'];
   const motionLabels = {
-    '默认手切举手': '举手',
-    '举手切默认手': '放下手',
-    '狗尾草切换出来': '拿出狗尾草',
-    '狗尾草切回默认手': '收起狗尾草',
-    '竖手指切出来动画': '竖手指',
-    '竖手指切回默认': '收回手指',
-    '脱捕': '脱捕'
+    '默认手切举手': '举手', '举手切默认手': '放下手',
+    '狗尾草切换出来': '拿出狗尾草', '狗尾草切回默认手': '收起狗尾草',
+    '竖手指切出来动画': '竖手指', '竖手指切回默认': '收回手指', '脱捕': '脱捕'
   };
-  // 勾选来源：正在演的是实时状态；演完以后保留「上一次选的」，不然打开菜单永远没勾
   const motionNow = latestState.motion || cfg.lastMotion || '';
   const motionSub = motionNames.map(function (n) {
-    return { label: motionLabels[n] || n, type: 'radio', checked: motionNow === n,
-      click: function () {
+    return { label: motionLabels[n] || n, kind: 'radio', on: motionNow === n,
+      run: function () {
         cfg.lastMotion = n; saveConfig(cfg);
         sendToRenderer({ action: 'motion', group: n });
       } };
   });
   const sizeSub = [
-    { label: S.menu.size_small || '小', click: function () { setPetSize('small'); } },
-    { label: S.menu.size_mid || '中', click: function () { setPetSize('mid'); } },
-    { label: S.menu.size_big || '大', click: function () { setPetSize('big'); } }
+    { label: S.menu.size_small || '小', run: function () { setPetSize('small'); } },
+    { label: S.menu.size_mid || '中', run: function () { setPetSize('mid'); } },
+    { label: S.menu.size_big || '大', run: function () { setPetSize('big'); } }
   ];
-  // 任务6：形态 = 模型自带「大小变」（Clothes2），不是窗口缩放
   const formNow = cfg.form || 'big';
   const formSub = [
-    { label: '诺诺', type: 'radio', checked: formNow === 'big', click: function () { setForm('big'); } },
-    { label: '小诺诺', type: 'radio', checked: formNow === 'mid', click: function () { setForm('mid'); } },
-    { label: '诺宝宝', type: 'radio', checked: formNow === 'small', click: function () { setForm('small'); } }
+    { label: '诺诺', kind: 'radio', on: formNow === 'big', run: function () { setForm('big'); } },
+    { label: '小诺诺', kind: 'radio', on: formNow === 'mid', run: function () { setForm('mid'); } },
+    { label: '诺宝宝', kind: 'radio', on: formNow === 'small', run: function () { setForm('small'); } }
   ];
-  // 任务5：鞋子 = Clothes4（0 穿 / 1 脱）
   const shoeWearing = cfg.shoe !== 'off';
   const shoeSub = [
-    { label: '穿着', type: 'radio', checked: shoeWearing, click: function () { setShoe('on'); } },
-    { label: '脱掉', type: 'radio', checked: !shoeWearing, click: function () { setShoe('off'); } }
+    { label: '穿着', kind: 'radio', on: shoeWearing, run: function () { setShoe('on'); } },
+    { label: '脱掉', kind: 'radio', on: !shoeWearing, run: function () { setShoe('off'); } }
   ];
-  // 帧率档位（radio，和鞋子同款）
   const fpsNow = cfg.fps === undefined ? 'auto' : cfg.fps;
   const fpsSub = [
-    { label: '自动（空闲 30）', type: 'radio', checked: fpsNow === 'auto', click: function () { setFps('auto'); } },
-    { label: '30 帧', type: 'radio', checked: String(fpsNow) === '30', click: function () { setFps(30); } },
-    { label: '60 帧', type: 'radio', checked: String(fpsNow) === '60', click: function () { setFps(60); } },
-    { label: '90 帧', type: 'radio', checked: String(fpsNow) === '90', click: function () { setFps(90); } }
+    { label: '自动（空闲 30）', kind: 'radio', on: fpsNow === 'auto', run: function () { setFps('auto'); } },
+    { label: '30 帧', kind: 'radio', on: String(fpsNow) === '30', run: function () { setFps(30); } },
+    { label: '60 帧', kind: 'radio', on: String(fpsNow) === '60', run: function () { setFps(60); } },
+    { label: '90 帧', kind: 'radio', on: String(fpsNow) === '90', run: function () { setFps(90); } }
   ];
   return [
-    { label: '她现在：' + moodLabelNow() + (latestState.mood_cause ? '（' + latestState.mood_cause + '）' : ''), enabled: false },
-    { type: 'separator' },
-    { label: S.menu.recenter, click: recenterWindow },
-    { type: 'separator' },
-    { label: S.menu.pat || '摸摸头', click: function () { sendToRenderer({ action: 'pat_auto' }); } },
-    { label: S.menu.say || '说句话', click: function () { sendToRenderer({ action: 'say_something' }); } },
-    { label: S.menu.expr || '表情', submenu: exprSub },
-    { label: '表情预设', submenu: presetSub },
-    { label: '动作', submenu: motionSub },
-    { type: 'separator' },
-    { label: S.menu.appearance || '外观', submenu: [
-      { label: '长裙 ⇄ 短裙', click: function () {
+    { sep: true },
+    { label: S.menu.recenter, icon: '◎', run: recenterWindow },
+    { sep: true },
+    { label: S.menu.pat || '摸摸头', icon: '♡', run: function () { sendToRenderer({ action: 'pat_auto' }); } },
+    { label: S.menu.say || '说句话', icon: '❝', run: function () { sendToRenderer({ action: 'say_something' }); } },
+    { sep: true },
+    { submenu: exprSub, label: S.menu.expr || '表情', icon: '◡', open: false },
+    { submenu: presetSub, label: '表情预设', icon: '✦', open: false },
+    { submenu: motionSub, label: '动作', icon: '✋', open: false },
+    { sep: true },
+    { label: S.menu.appearance || '外观', icon: '❖', open: false, submenu: [
+      { label: '长裙 ⇄ 短裙', badge: cfg.skirt === 'short' ? '短' : '长', run: function () {
         cfg.skirt = cfg.skirt === 'short' ? 'long' : 'short'; saveConfig(cfg);
         sendToRenderer({ action: 'skirt', value: cfg.skirt });
         rebuildMenu();
       } },
-      { label: '尾巴 ⇄ 收起', click: function () {
+      { label: '尾巴 ⇄ 收起', badge: cfg.tail === 'off' ? '收' : '露', run: function () {
         cfg.tail = cfg.tail === 'off' ? 'on' : 'off'; saveConfig(cfg);
         sendToRenderer({ action: 'tail', value: cfg.tail === 'off' ? 'off' : 'on' });
         rebuildMenu();
       } },
-      { type: 'separator' },
-      { label: '鞋子', submenu: shoeSub },
-      { label: '形态', submenu: formSub },
-      { label: '窗口大小', submenu: sizeSub }
+      { submenu: shoeSub, label: '鞋子' },
+      { submenu: formSub, label: '形态' },
+      { submenu: sizeSub, label: '窗口大小' }
     ]},
-    { type: 'separator' },
-    { label: S.menu.recipes || '动作库', submenu: Object.keys(RECIPES).sort().map(function (n) {
-        return { label: n, click: (function (nm) {
-          return function () {
-            sendToRenderer({ action: 'plan', steps: RECIPES[nm].steps });
-            log('[菜单] 配方 ' + nm);
-          };
-        })(n) };
-      })
-    },
-    { label: visible ? '先藏起来' : '回来', click: toggleVisible },
-    { label: '鼠标穿透（不挡操作）', type: 'checkbox', checked: !interactive,
-      click: function () { setInteractive(false); } },
-    { label: '能摸她（Alt + 拖动移位）', type: 'checkbox', checked: interactive,
-      click: function () { setInteractive(true); } },
-    { label: '设置', submenu: [
-      { label: S.menu.always_top || '总在最前', type: 'checkbox', checked: alwaysTop,
-        click: function (m) {
-          alwaysTop = !!m.checked;
+    { submenu: Object.keys(RECIPES).sort().map(function (n) {
+        return { label: n, run: function () {
+          sendToRenderer({ action: 'plan', steps: RECIPES[n].steps });
+          log('[菜单] 配方 ' + n);
+        } };
+      }), label: S.menu.recipes || '动作库', icon: '☰', open: false },
+    { sep: true },
+    { label: visible ? '先藏起来' : '回来', icon: visible ? '◐' : '◑', run: toggleVisible },
+    { label: '鼠标穿透（不挡操作）', kind: 'check', on: !interactive,
+      run: function () { setInteractive(false); } },
+    { label: '能摸她（Alt + 拖动移位）', kind: 'check', on: interactive,
+      run: function () { setInteractive(true); } },
+    { submenu: [
+      { label: S.menu.always_top || '总在最前', kind: 'check', on: alwaysTop,
+        run: function (m) {
+          alwaysTop = m && typeof m.checked === 'boolean' ? m.checked : !alwaysTop;
           if (win && !win.isDestroyed()) win.setAlwaysOnTop(alwaysTop);
         } },
-      { label: '开机自启', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin,
-        click: function (m) { app.setLoginItemSettings({ openAtLogin: m.checked }); } },
-      { label: '帧率', submenu: fpsSub },
-      { label: '感知前台窗口（只读标题）', type: 'checkbox', checked: cfg.peek !== false,
-        click: function () { cfg.peek = !cfg.peek; saveConfig(cfg); rebuildMenu(); } },
-      { label: dockHwnd ? '取消贴身' : '贴到当前前台窗口', click: function () {
+      { label: '开机自启', kind: 'check', on: app.getLoginItemSettings().openAtLogin,
+        run: function (m) { app.setLoginItemSettings({ openAtLogin: m.checked }); } },
+      { submenu: fpsSub, label: '帧率' },
+      { label: '感知前台窗口（只读标题）', kind: 'check', on: cfg.peek !== false,
+        run: function () { cfg.peek = !cfg.peek; saveConfig(cfg); rebuildMenu(); } },
+      { label: dockHwnd ? '取消贴身' : '贴到当前前台窗口', run: function () {
           if (dockHwnd) { stopDock(); return; }
           psPeek('foreground', 0, function (err, out) {
             if (err || !out || out === 'none' || out === 'gone') return;
             dockTo((+out.split('\t')[2]) || 0);
           });
         } },
-      { label: S.menu.sfx || '音效', type: 'checkbox', checked: sfxOn,
-        click: function (m) {
+      { label: S.menu.sfx || '音效', kind: 'check', on: sfxOn,
+        run: function (m) {
           sfxOn = !!m.checked;
           cfg.sfx = sfxOn; saveConfig(cfg);
           if (win && !win.isDestroyed()) win.webContents.send('nono-sfx', sfxOn);
         } },
-      { label: '说话出声（TTS）', type: 'checkbox', checked: ttsOn,
-        click: function (m) {
+      { label: '说话出声（TTS）', kind: 'check', on: ttsOn,
+        run: function (m) {
           ttsOn = !!m.checked;
           cfg.tts = ttsOn; saveConfig(cfg);
           if (win && !win.isDestroyed()) win.webContents.send('nono-tts-enabled', ttsOn);
         } }
-    ]},
-    { type: 'separator' },
-    { label: S.menu.about, click: showAbout },
-    { type: 'separator' },
-    { label: '控制端口：' + wsPort, enabled: false },
-    { label: 'MCP：127.0.0.1:' + (mcp ? mcp.port : 8768) + '/mcp', enabled: false },
-    { type: 'separator' },
-    { label: S.menu.quit, click: requestQuit }
+    ], label: '设置', icon: '⚙', open: false },
+    { sep: true },
+    { label: S.menu.about, icon: 'ⓘ', run: showAbout },
+    { label: S.menu.quit, icon: '⏻', danger: true, run: requestQuit }
   ];
+}
+
+/* 模型 → Electron 原生菜单模板（托盘用；原生菜单不能自定义样式） */
+function modelToTemplate(items) {
+  return items.map(function (it) {
+    if (it.sep) return { type: 'separator' };
+    const o = { label: it.label };
+    if (it.submenu) o.submenu = modelToTemplate(it.submenu);
+    if (it.disabled) o.enabled = false;
+    if (it.kind === 'radio') { o.type = 'radio'; o.checked = !!it.on; }
+    if (it.kind === 'check') { o.type = 'checkbox'; o.checked = !!it.on; }
+    if (it.run) o.click = function (mi) { it.run(mi); };
+    return o;
+  });
+}
+
+/* 模型 → 可序列化 JSON（自绘菜单用）；同时把每项的 run 存进 actions[id] */
+function modelToJson(items, prefix, actions) {
+  const out = [];
+  items.forEach(function (it, i) {
+    if (it.sep) { out.push({ type: 'sep' }); return; }
+    const id = prefix + i;
+    if (it.run) actions[id] = it.run;
+    if (it.submenu) {
+      out.push({ type: 'group', label: it.label, open: it.open !== false,
+        items: modelToJson(it.submenu, id + '_', actions) });
+    } else {
+      out.push({ id: id, label: it.label, kind: it.kind, on: !!it.on,
+        icon: it.icon, badge: it.badge, danger: it.danger, disabled: it.disabled });
+    }
+  });
+  return out;
 }
 
 function rebuildMenu() {
   if (!tray) return;
-  tray.setContextMenu(Menu.buildFromTemplate(buildMenuTemplate()));
+  tray.setContextMenu(Menu.buildFromTemplate(modelToTemplate(buildMenuModel())));
+}
+
+/* ---------- 自绘右键菜单（2026-11-10） ----------
+ * 原生菜单在 Windows 上是系统样式，改不了；右键走独立的透明小窗口。
+ * 托盘还是系统菜单——托盘菜单没法自绘。
+ */
+let menuWin = null;
+let menuActions = {};
+let menuAt = { x: 0, y: 0 };
+
+function closeCustomMenu() {
+  if (menuWin && !menuWin.isDestroyed()) menuWin.destroy();
+  menuWin = null;
+  menuActions = {};
+}
+
+function showCustomMenu() {
+  closeCustomMenu();
+  const model = buildMenuModel();
+  const actions = {};
+  const items = modelToJson(model, 'm', actions);
+  menuActions = actions;
+
+  const cur = screen.getCursorScreenPoint();
+  menuAt = cur;
+  menuWin = new BrowserWindow({
+    width: MENU_W, height: 420,
+    x: Math.round(cur.x - 6), y: Math.round(cur.y - 6),
+    frame: false, transparent: true, resizable: false, movable: false,
+    skipTaskbar: true, alwaysOnTop: true, hasShadow: false,
+    show: false, focusable: true,
+    webPreferences: {
+      preload: path.join(__dirname, 'menu-preload.js'),
+      contextIsolation: true, nodeIntegration: false, sandbox: false,
+      backgroundThrottling: false
+    }
+  });
+  menuWin.setAlwaysOnTop(true, 'pop-up-menu');
+  menuWin.loadFile(path.join(__dirname, 'menu-ui.html'));
+  menuWin.once('ready-to-show', function () {
+    if (menuWin && !menuWin.isDestroyed()) { menuWin.show(); menuWin.focus(); }
+  });
+  menuWin.on('blur', function () {
+    // 还没显示出来时的 blur 不算（否则创建瞬间就自己关掉）
+    if (menuWin && !menuWin.isDestroyed() && menuWin.isVisible()) closeCustomMenu();
+  });
+  menuWin.on('closed', function () { menuWin = null; });
+  menuWin.webContents.once('did-finish-load', function () {
+    if (!menuWin || menuWin.isDestroyed()) return;
+    menuWin.webContents.send('nono-menu-model', {
+      mood: moodLabelNow(),
+      cause: latestState.mood_cause || '',
+      items: items
+    });
+  });
+  log('[菜单] 已弹出');
+}
+
+/* 菜单窗口按内容高度收缩，并把位置夹进当前显示器。
+ * 2026-11-10：鼠标贴屏幕右下角时原来的写法会顶到边上、下半截被切，
+ * 改成「右边不够往左开、下面不够往上开」的标准菜单行为。 */
+const MENU_W = 248;
+function fitMenuWindow(h) {
+  if (!menuWin || menuWin.isDestroyed()) return;
+  const disp = screen.getDisplayNearestPoint(menuAt);
+  const wa = disp.workArea;
+  const maxH = Math.max(160, wa.height - 24);
+  const panelH = Math.max(80, Math.min(560, Math.round(h || 420), maxH)) + 4;
+
+  let x = menuAt.x - 6;
+  if (x + MENU_W > wa.x + wa.width - 6) x = menuAt.x - MENU_W + 6;   // 向左开
+  if (x < wa.x + 6) x = wa.x + 6;
+  if (x + MENU_W > wa.x + wa.width - 6) x = wa.x + wa.width - MENU_W - 6;
+
+  let y = menuAt.y - 6;
+  if (y + panelH > wa.y + wa.height - 6) y = menuAt.y - panelH + 6;  // 向上开
+  if (y < wa.y + 6) y = wa.y + 6;
+  if (y + panelH > wa.y + wa.height - 6) y = wa.y + wa.height - panelH - 6;
+
+  menuWin.setBounds({ x: Math.round(x), y: Math.round(y), width: MENU_W, height: panelH });
 }
 
 function showContextMenu() {
-  const menu = Menu.buildFromTemplate(buildMenuTemplate());
-  if (win && !win.isDestroyed()) menu.popup({ window: win });
-  else menu.popup();
-  log('[菜单] 已弹出');
+  if (cfg.menuStyle === 'native') {
+    const menu = Menu.buildFromTemplate(modelToTemplate(buildMenuModel()));
+    if (win && !win.isDestroyed()) menu.popup({ window: win });
+    else menu.popup();
+    log('[菜单] 已弹出（原生）');
+    return;
+  }
+  showCustomMenu();
 }
 
 function showAbout() {
@@ -988,6 +1119,18 @@ if (!app.requestSingleInstanceLock()) {
   });
   // 0号第三轮任务三：画布右键 → 弹菜单
   ipcMain.on('nono-context-menu', function () { showContextMenu(); });
+  // 自绘菜单（2026-11-10）：菜单窗口只负责画，动作全回主进程执行
+  ipcMain.on('nono-menu-ready', function () { /* 等 did-finish-load 之后主进程会推模型 */ });
+  ipcMain.on('nono-menu-click', function (_e, d) {
+    if (!d || !d.id) return;
+    const fn = menuActions[d.id];
+    closeCustomMenu();
+    if (typeof fn === 'function') {
+      try { fn({ checked: !!d.nextOn }); } catch (err) { err('[菜单] 执行失败 ' + (err && err.message)); }
+    }
+  });
+  ipcMain.on('nono-menu-resize', function (_e, h) { fitMenuWindow(h); });
+  ipcMain.on('nono-menu-close', function () { closeCustomMenu(); });
   // petbox 同款·像素级智能穿透:渲染层报「摸到她了」→主进程切穿透(只管穿透态;可交互/拖动态不抢)
   ipcMain.on('nono-pixel-hit', function (_e, hit) {
     if (interactive || dragging || forceInteractive) return;
@@ -1007,7 +1150,9 @@ if (!app.requestSingleInstanceLock()) {
   });
   // 0号督办任务2:小海在桌宠里打的话→存成文件(先落盘,DSH 后面再接)
   ipcMain.on('nono-write-speak', function (_e, text) {
-    const dir = 'G:' + path.sep + '任务中枢' + path.sep + '待领' + path.sep + '说话';
+    // 落盘目录由 edition.js 给；开源版为空 = 不落盘（不碰任何本机私有目录）
+    const dir = EDITION.speakOutDir || '';
+    if (!dir) { log('[说话] 已收到（当前版本不落盘）：' + String(text || '').slice(0, 40)); return; }
     try {
       fs.mkdirSync(dir, { recursive: true });
       const f = path.join(dir, Date.now() + '.txt');

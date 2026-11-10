@@ -461,8 +461,19 @@ function createMcp(opts) {
   function handler(req, res) {
     const u = new URL(req.url, 'http://127.0.0.1');
     const path = u.pathname;
-    // 不开 CORS（原来这里是对 * 放行）——本地 MCP 客户端不走 CORS，
-    // 而浏览器里任何网页没有 CORS 就读不到响应、也过不了预检。网页想隔着浏览器指挥她，没门。
+    /* 安全（2026-11-10）：
+     * 1) 不开 CORS（原来这里是对 * 放行）——本地 MCP 客户端不走 CORS，
+     *    浏览器里任何网页没有 CORS 就读不到响应、也过不了预检。
+     * 2) 即使读不到响应，「简单请求」仍能把副作用发过来。所以再有两条硬拦截：
+     *    · 带 Origin 且不是本机页面 → 403（MCP 客户端/CLI 不带 Origin）
+     *    · POST 只认 application/json（text/plain 等跨源简单请求类型直接拒）
+     */
+    const origin = req.headers.origin;
+    if (origin && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/i.test(String(origin))) {
+      res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
+      res.end('forbidden origin');
+      return;
+    }
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Accept, Mcp-Session-Id, MCP-Protocol-Version');
     if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
@@ -520,6 +531,13 @@ function createMcp(opts) {
     }
 
     if ((path === '/mcp' || path === '/messages') && req.method === 'POST') {
+      // 只收 JSON：挡掉 text/plain / form 这类可绕预检的简单请求
+      const ctype = String(req.headers['content-type'] || '').toLowerCase();
+      if (ctype.indexOf('application/json') < 0) {
+        res.writeHead(415, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end('unsupported media type');
+        return;
+      }
       let body = '';
       req.on('data', function (c) { body += c; });
       req.on('end', function () {
